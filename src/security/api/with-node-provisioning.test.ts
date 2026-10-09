@@ -91,32 +91,6 @@ describe('withNodeProvisioning', () => {
     expect(body.code).toBe('BOOTSTRAP_REQUIRED');
   });
 
-  it('returns 409 with DEFAULT_TENANT_NOT_FOUND code when single-tenant config is invalid', async () => {
-    const handler = withNodeProvisioning(
-      async () => NextResponse.json({ ok: true }),
-      {
-        resolveAccess: async () => ({
-          status: 'TENANT_CONTEXT_REQUIRED',
-          code: 'DEFAULT_TENANT_NOT_FOUND',
-          message: 'default tenant missing',
-          diagnostics: {
-            ...diagnostics,
-            userRecordExists: true,
-            tenantRecordExists: false,
-            onboardingStateExists: true,
-            onboardingComplete: true,
-            reason: 'missing_tenant',
-          },
-        }),
-      },
-    );
-
-    const response = await handler(createRequest('/api/users'), context);
-    expect(response.status).toBe(409);
-    const body = await response.json();
-    expect(body.code).toBe('DEFAULT_TENANT_NOT_FOUND');
-  });
-
   it('returns 403 with ACCOUNT_DISABLED code when the account has been deactivated (SEC-33)', async () => {
     const handler = withNodeProvisioning(
       async () => NextResponse.json({ ok: true }),
@@ -177,6 +151,10 @@ describe('withNodeProvisioning', () => {
         status: 'ALLOWED',
         identity: { id: 'u-1' },
         tenant: { organizationId: 't-1', tenantId: 't-1', userId: 'u-1' },
+        activeOrganization: {
+          organizationId: 't-1',
+          tenantId: 'tenant-parent-1',
+        },
         user: {
           id: 'u-1',
           email: 'user@example.com',

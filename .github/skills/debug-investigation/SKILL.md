@@ -1,8 +1,8 @@
 ---
-description: 'Gather logs, changed files, and runtime context for an ambiguous bug and route the investigation to 06 - Debug Investigation.'
-name: 'Debug Investigation'
+name: debug-investigation
+description: Gather logs, changed files, and runtime context for an ambiguous bug and route the investigation to 06 - Debug Investigation.
+disable-model-invocation: true
 argument-hint: 'Bug symptoms, repro notes, suspected area, or logs to emphasize'
-agent: '06 - Debug Investigation'
 ---
 
 > **Task Lifecycle**

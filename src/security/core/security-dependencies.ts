@@ -1,3 +1,4 @@
+import type { OrganizationScopeAuthority } from '@/core/contracts/access-scope-authority';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type {
   IdentityProvider,
@@ -13,6 +14,7 @@ export interface BaseSecurityDependencies {
 
 export interface NodeSecurityContextDependencies extends BaseSecurityDependencies {
   userRepository: UserRepository;
+  organizationScopeAuthority: OrganizationScopeAuthority;
   /**
    * Raw provider claims for this request, supplying the session issue-time
    * (`iat`) that the revocation check compares against

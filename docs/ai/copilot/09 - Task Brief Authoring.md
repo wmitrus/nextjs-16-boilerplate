@@ -9,10 +9,10 @@
 Keep the setup generic.
 
 - agents stay reusable
-- prompts stay reusable
+- skills stay reusable
 - task-specific detail lives in your task brief, requirement docs, matrices, and attachments
 
-Do not create a one-off prompt just because one task has a rich specification.
+Do not create a one-off skill just because one task has a rich specification.
 
 # Recommended Authoring Model
 
@@ -59,7 +59,7 @@ Recommended flow:
 
 1. Create or update the task brief in the appropriate repository location.
 2. Reference any supporting matrices, checklists, specs, logs, or design docs.
-3. Start [workflow-task.prompt.md](../../../.github/prompts/workflow-task.prompt.md) with the task description and the relevant file references.
+3. Start [workflow-task/SKILL.md](../../../.github/skills/workflow-task/SKILL.md) with the task description and the relevant file references.
 4. Let `08 - Workflow Orchestrator` create `.copilot/tasks/{task_id}/plan.md` first.
 5. Let the orchestrator create `intake.md` from your brief and references.
 6. Let the orchestrator decide which specialist agents are required.
@@ -90,12 +90,12 @@ It should include, when relevant:
 
 # Example Operator Pattern
 
-Use the prompt generically.
+Use the skill generically.
 
 Example shape:
 
 ```text
-/Workflow Task
+/workflow-task
 
 Description:
 Implement the task described in docs/feature-desings/02 - Auth Regression Tests.md.
@@ -119,7 +119,7 @@ If you want behavior similar to an SDD workflow, the brief must be detailed enou
 
 The reusable system should provide:
 
-- universal prompts
+- universal skills
 - stable artifact names
 - stable specialist responsibilities
 - one persistent summary artifact per specialist agent under the task directory
@@ -132,4 +132,4 @@ The task brief should provide:
 - acceptance detail
 - evidence expectations
 
-That separation is what keeps the setup clean instead of turning `.github/prompts/` into a folder of one-off commands.
+That separation is what keeps the setup clean instead of turning `.github/skills/` into a folder of one-off commands.

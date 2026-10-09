@@ -53,6 +53,10 @@ describe('/api/me/provisioning-status route integration', () => {
       status: 'ALLOWED',
       identity: { id: 'u-1' },
       tenant: { organizationId: 't-1', tenantId: 't-1', userId: 'u-1' },
+      activeOrganization: {
+        organizationId: 'org-1',
+        tenantId: 'tenant-1',
+      },
       user: { id: 'u-1', onboardingComplete: true },
     });
 
@@ -65,8 +69,9 @@ describe('/api/me/provisioning-status route integration', () => {
     const body = await response.json();
     expect(body.status).toBe('ok');
     expect(body.data.internalUserId).toBe('u-1');
-    expect(body.data.internalOrganizationId).toBe('t-1');
+    expect(body.data.internalOrganizationId).toBe('org-1');
     expect(body.data.onboardingComplete).toBe(true);
-    expect(body.data.tenancyMode).toBe('single');
+    expect(body.data.tenantContextSource).toBe('db');
+    expect(body.data).not.toHaveProperty('tenancyMode');
   });
 });

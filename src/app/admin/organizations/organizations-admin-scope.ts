@@ -73,10 +73,7 @@ export async function resolveOrganizationsAdminScope(
   db: DrizzleDb,
 ): Promise<OrganizationsAdminDataScope | null> {
   const authority = new DrizzleOrganizationScopeAuthority(db);
-  const accessContext = await buildOrganizationsAdminAccessContext(
-    access,
-    authority,
-  );
+  const accessContext = buildOrganizationsAdminAccessContext(access);
 
   const activeOrganization = accessContext.activeOrganization;
   if (activeOrganization === null) {
@@ -117,24 +114,11 @@ export async function resolveOrganizationsAdminScope(
   return classifyOrdinaryOrganizationScopeDenial(derivation.reason);
 }
 
-async function buildOrganizationsAdminAccessContext(
+function buildOrganizationsAdminAccessContext(
   access: NodeProvisioningAccessAllowed,
-  authority: DrizzleOrganizationScopeAuthority,
-): Promise<AccessContext> {
-  const activeOrganizationId = access.tenant.organizationId;
-
-  // Parent tenant identity is loaded INDEPENDENTLY from authoritative
-  // organization -> tenant data. Never `access.tenant.tenantId`, which legacy
-  // TenantContext still collapses onto the organization id.
-  const parentTenantId =
-    await authority.readParentTenantId(activeOrganizationId);
-
-  if (parentTenantId === null) {
-    // Node provisioning already resolved this as the active internal
-    // organization, and organizations.tenant_id is NOT NULL. A null here is a
-    // contradictory DB / working-context state.
-    throw new OrganizationsAdminScopeInvariantError();
-  }
+): AccessContext {
+  const activeOrganizationId = access.activeOrganization.organizationId;
+  const parentTenantId = access.activeOrganization.tenantId;
 
   try {
     return buildAccessContext({

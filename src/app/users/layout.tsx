@@ -50,7 +50,6 @@ export async function UsersLayoutGuard({
         correlationId: requestContext.correlationId,
         requestId: requestContext.requestId,
         pathname: '/users',
-        tenancyMode: 'unknown',
         userRecordExists: null,
         tenantRecordExists: null,
         membershipExists: null,
@@ -88,7 +87,6 @@ export async function UsersLayoutGuard({
       authenticatedExternalUserId: access.diagnostics.externalUserId,
       internalIdentityId: access.diagnostics.internalIdentityId,
       internalOrganizationId: access.diagnostics.internalOrganizationId,
-      tenancyMode: access.diagnostics.tenancyMode,
       userRecordExists: access.diagnostics.userRecordExists,
       tenantRecordExists: access.diagnostics.tenantRecordExists,
       membershipExists: access.diagnostics.membershipExists,
@@ -116,7 +114,9 @@ export async function UsersLayoutGuard({
   }
 
   if (access.status === 'TENANT_CONTEXT_REQUIRED') {
-    redirect('/auth/bootstrap?reason=tenant-lost');
+    redirect(
+      `/auth/bootstrap/start?redirect_url=${encodeURIComponent('/users')}`,
+    );
   }
 
   if (

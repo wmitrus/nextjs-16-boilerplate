@@ -80,7 +80,7 @@ still need explicit, bounded handoffs that carry the relevant role constraints.
 - Shared specialist prompts live in `docs/ai/general/01-09 - *.md`.
 - Neutral workflow specs live in `docs/ai/general/Workflow *.md`.
 - Authority boundaries and propagation rules live in `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`.
-- GitHub Copilot runtime surfaces live in `.github/agents/` and `.github/prompts/`.
+- GitHub Copilot runtime surfaces live in `.github/agents/` and `.github/skills/`.
 - ZenFlow runtime workflow specs live in `.zenflow/workflows/`.
 - Human-facing Codex guides live in `docs/ai/codex/`.
 

@@ -533,6 +533,29 @@ describe('DrizzleProvisioningService (real DB)', () => {
         }),
       ).rejects.toThrow(TenantNotProvisionedError);
     });
+
+    it('fails closed when configured bootstrap tenant exists but has no organization (CF-1)', async () => {
+      const tenantId = '99999999-0000-4000-8000-000000000998';
+
+      await testDb.db
+        .insert(tenantsTable)
+        .values({
+          id: tenantId,
+          name: 'CF-1 Tenant Without Organization',
+        })
+        .onConflictDoNothing();
+
+      const svc = makeService();
+
+      await expect(
+        svc.ensureProvisioned({
+          provider: 'clerk',
+          externalUserId: 'user_single_cf1_no_org',
+          tenancyMode: 'single',
+          activeTenantId: tenantId,
+        }),
+      ).rejects.toThrow(TenantNotProvisionedError);
+    });
   });
 
   describe('cross-provider email linking (P1 security fix)', () => {

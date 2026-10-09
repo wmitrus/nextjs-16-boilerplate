@@ -90,14 +90,8 @@ async function resolveOrdinaryAdminScope(
   db: DrizzleDb,
 ): Promise<AuditLogSettingsScopeResolution> {
   const authority = new DrizzleOrganizationScopeAuthority(db);
-  const activeOrganizationId = access.tenant.organizationId;
-
-  const parentTenantId =
-    await authority.readParentTenantId(activeOrganizationId);
-
-  if (parentTenantId === null) {
-    throw new AuditLogSettingsScopeInvariantError();
-  }
+  const activeOrganizationId = access.activeOrganization.organizationId;
+  const parentTenantId = access.activeOrganization.tenantId;
 
   let accessContext: AccessContext;
   try {
@@ -162,7 +156,8 @@ async function resolvePlatformAdminScope(
 
   const canonical = await resolveCanonicalAuditWriteScope({
     isPlatformAdmin: true,
-    ordinaryActiveOrganizationId: input.access.tenant.organizationId,
+    ordinaryActiveOrganizationId:
+      input.access.activeOrganization.organizationId,
     platformTargetOrganizationId: input.platformTargetOrganizationId,
     db: input.db,
     authProvider: input.authProvider,

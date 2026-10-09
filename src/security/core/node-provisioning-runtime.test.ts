@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Container } from '@/core/container';
-import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
 
 import { resolveNodeProvisioningAccess } from './node-provisioning-runtime';
 
@@ -33,7 +33,7 @@ vi.mock('./node-provisioning-access', async () => {
   };
 });
 
-function createContainer(dbRows: unknown[] = []) {
+function createContainer() {
   const requestIdentitySource = {
     get: vi.fn().mockResolvedValue({
       userId: 'external-user-1',
@@ -43,8 +43,9 @@ function createContainer(dbRows: unknown[] = []) {
   const identityProvider = { getCurrentIdentity: vi.fn() };
   const tenantResolver = { resolve: vi.fn() };
   const userRepository = { findById: vi.fn() };
-  const db = {
-    execute: vi.fn().mockResolvedValue({ rows: dbRows }),
+  const organizationScopeAuthority = {
+    readParentTenantId: vi.fn().mockResolvedValue('tenant-parent-1'),
+    isMember: vi.fn().mockResolvedValue(true),
   };
 
   const services = new Map<symbol, unknown>([
@@ -52,15 +53,15 @@ function createContainer(dbRows: unknown[] = []) {
     [AUTH.IDENTITY_PROVIDER, identityProvider],
     [AUTH.TENANT_RESOLVER, tenantResolver],
     [AUTH.USER_REPOSITORY, userRepository],
-    [INFRASTRUCTURE.DB, db],
+    [AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY, organizationScopeAuthority],
   ]);
 
   return {
     container: {
       resolve: vi.fn((token: symbol) => services.get(token)),
     } as unknown as Container,
-    db,
     identityProvider,
+    organizationScopeAuthority,
     requestIdentitySource,
     tenantResolver,
     userRepository,
@@ -73,9 +74,13 @@ describe('resolveNodeProvisioningAccess', () => {
     evaluateNodeProvisioningAccessMock.mockClear();
   });
 
-  it('wires request identity and a tenant existence probe in single-tenant mode', async () => {
-    const { container, db, identityProvider, requestIdentitySource } =
-      createContainer([{ id: 'tenant-1' }]);
+  it('wires request identity and canonical organization authority', async () => {
+    const {
+      container,
+      identityProvider,
+      organizationScopeAuthority,
+      requestIdentitySource,
+    } = createContainer();
 
     await resolveNodeProvisioningAccess(container);
 
@@ -83,40 +88,24 @@ describe('resolveNodeProvisioningAccess', () => {
     expect(evaluateNodeProvisioningAccessMock).toHaveBeenCalledWith(
       expect.objectContaining({
         identityProvider,
-        tenancyMode: 'single',
+        organizationScopeAuthority,
         rawIdentity: {
           userId: 'external-user-1',
           orgExternalId: 'external-org-1',
         },
       }),
     );
-
-    const deps = evaluateNodeProvisioningAccessMock.mock.calls[0]?.[0];
-    await expect(deps.tenantExistsProbe('tenant-1')).resolves.toBe(true);
-    expect(db.execute).toHaveBeenCalledTimes(1);
   });
 
-  it('returns false from the single-tenant probe when no tenant row exists', async () => {
-    const { container } = createContainer([]);
-
-    await resolveNodeProvisioningAccess(container);
-
-    const deps = evaluateNodeProvisioningAccessMock.mock.calls[0]?.[0];
-    await expect(deps.tenantExistsProbe('tenant-1')).resolves.toBe(false);
-  });
-
-  it('does not resolve the database outside single-tenant mode', async () => {
+  it('does not pass legacy tenancy mode into runtime access evaluation', async () => {
     mockEnv.TENANCY_MODE = 'org';
-    const { container, db } = createContainer([{ id: 'tenant-1' }]);
+    const { container, organizationScopeAuthority } = createContainer();
 
     await resolveNodeProvisioningAccess(container);
 
-    expect(evaluateNodeProvisioningAccessMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenancyMode: 'org',
-        tenantExistsProbe: undefined,
-      }),
-    );
-    expect(db.execute).not.toHaveBeenCalled();
+    const deps = evaluateNodeProvisioningAccessMock.mock.calls[0]?.[0];
+
+    expect(deps.organizationScopeAuthority).toBe(organizationScopeAuthority);
+    expect(deps).not.toHaveProperty('tenancyMode');
   });
 });

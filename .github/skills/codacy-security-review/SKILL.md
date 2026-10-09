@@ -1,8 +1,8 @@
 ---
-description: 'Triage and remediate Codacy CRITICAL/HIGH security findings from a pull request, group by group, with a manual pause between groups for review.'
-name: 'Codacy Security Review'
+name: codacy-security-review
+description: Triage and remediate Codacy CRITICAL/HIGH security findings from a pull request, group by group, with a manual pause between groups for review.
+disable-model-invocation: true
 argument-hint: 'Paste Codacy findings from the PR comment — file paths, line numbers, rule names, and finding text'
-agent: '08 - Workflow Orchestrator'
 ---
 
 > **Task Lifecycle**

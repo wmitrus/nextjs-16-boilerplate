@@ -1,8 +1,8 @@
 ---
-description: 'Start a full orchestrated incident investigation for a confirmed production failure or multi-layer regression through the Workflow Orchestrator.'
-name: 'Incident Investigation'
+name: incident-investigation
+description: Start a full orchestrated incident investigation for a confirmed production failure or multi-layer regression through the Workflow Orchestrator.
+disable-model-invocation: true
 argument-hint: 'Incident symptoms, logs, repro steps, affected user flow, environment context, or recent changes'
-agent: '08 - Workflow Orchestrator'
 ---
 
 > **Task Lifecycle**
@@ -11,9 +11,9 @@ agent: '08 - Workflow Orchestrator'
 
 Start a full incident investigation using `08 - Workflow Orchestrator`.
 
-Use this prompt for confirmed production failures or regressions where the root cause is unclear and a full specialist sequence is needed.
+Use this skill for confirmed production failures or regressions where the root cause is unclear and a full specialist sequence is needed.
 
-For standalone ambiguous debugging without a full workflow, use `/Debug Investigation` instead.
+For standalone ambiguous debugging without a full workflow, use `/debug-investigation` instead.
 
 Task input package:
 
@@ -29,7 +29,7 @@ Required workflow:
 - always run Debug Investigation Agent first — gather evidence and trace the execution path before any specialist commits to a diagnosis
 - run Next.js Runtime review only when Debug Investigation evidence points to routing, caching, server/client placement, or proxy behavior anomalies
 - run Architecture Guard only when the proposed fix risks module boundary violations or DI regression
-- do not run Security/Auth unless the incident involves auth flows, trust boundaries, or sensitive-data concerns — if it does, switch to `/Security Incident`
+- do not run Security/Auth unless the incident involves auth flows, trust boundaries, or sensitive-data concerns — if it does, switch to `/security-incident`
 - consolidate Debug Investigation findings and specialist outputs into a remediation plan before implementation begins
 - require every non-orchestrator specialist to create or update one persistent task summary file named with its agent number and name plus ` - Summary.md`
 - implementation must not start until the root cause is confirmed and the fix scope is explicit
@@ -46,7 +46,7 @@ Incident investigation discipline:
 - Debug Investigation runs first — never skip it for ambiguous or multi-layer failures
 - do not diagnose before evidence is gathered
 - keep the fix scope narrow and low-blast-radius
-- if the incident is reclassified as a security issue during investigation, switch to `/Security Incident`
+- if the incident is reclassified as a security issue during investigation, switch to `/security-incident`
 
 Required output:
 

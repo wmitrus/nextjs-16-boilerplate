@@ -4,6 +4,7 @@ vi.mock('server-only', () => ({}));
 
 import type { Container } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { OrganizationScopeAuthority } from '@/core/contracts/access-scope-authority';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import {
@@ -39,6 +40,7 @@ describe('Server Actions Integration', () => {
   let authorizationService: AuthorizationService;
   let tenantResolver: TenantResolver;
   let userRepository: UserRepository;
+  let organizationScopeAuthority: OrganizationScopeAuthority;
 
   const schema = z.object({
     name: z.string().min(3),
@@ -69,6 +71,10 @@ describe('Server Actions Integration', () => {
     );
     tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
     userRepository = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
+    organizationScopeAuthority = {
+      readParentTenantId: vi.fn().mockResolvedValue('parent-tenant'),
+      isMember: vi.fn().mockResolvedValue(true),
+    };
     resetClerkMocks();
     resetNextHeadersMocks();
     resetLoggerMocks();
@@ -92,6 +98,7 @@ describe('Server Actions Integration', () => {
       identityProvider,
       tenantResolver,
       userRepository,
+      organizationScopeAuthority,
       requestIdentitySource: {
         get: () =>
           Promise.resolve({

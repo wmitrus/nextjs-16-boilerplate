@@ -64,6 +64,10 @@ function makeAccess(
       tenantId: ACTIVE_ORG,
       userId: USER,
     },
+    activeOrganization: {
+      organizationId: ACTIVE_ORG,
+      tenantId: PARENT_TENANT,
+    },
     ...overrides,
   });
 }
@@ -257,9 +261,7 @@ describe('resolveAuditLogSettingsAdminScope', () => {
   });
 
   it('fails closed on contradictory ordinary organization evidence', async () => {
-    mocks.readParentTenantId
-      .mockResolvedValueOnce(PARENT_TENANT)
-      .mockResolvedValueOnce(null);
+    mocks.readParentTenantId.mockResolvedValue(null);
 
     await expect(
       resolveAuditLogSettingsAdminScope({

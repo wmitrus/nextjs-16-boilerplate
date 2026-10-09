@@ -1,15 +1,15 @@
 ---
-description: 'Review an auth/bootstrap/onboarding change against auth-flow anti-patterns and the verification matrix before implementation or sign-off.'
-name: 'Auth Flow Change Review'
+name: auth-flow-change-review
+description: Review an auth/bootstrap/onboarding change against auth-flow anti-patterns and the verification matrix before implementation or sign-off.
+disable-model-invocation: true
 argument-hint: 'Auth-flow change summary, affected files, symptoms, or risks to emphasize'
-agent: '02 - Security & Auth'
 ---
 
 > **Task Lifecycle**
 > Ensure a canonical Linear issue exists (see `AGENTS.md`). Do not invoke
 > `10 - Leantime Integration Agent` unless the user explicitly requests it.
 
-Review the current auth/bootstrap/onboarding change.
+Run `02 - Security & Auth` to review the current auth/bootstrap/onboarding change.
 
 Required auth-flow context:
 

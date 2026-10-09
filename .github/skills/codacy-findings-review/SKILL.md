@@ -1,8 +1,8 @@
 ---
-description: 'Review a local Codacy findings JSON artifact, group by severity and rule, verify false positives carefully, decide whether noisy rules should stay enabled, and propagate confirmed patterns into AI instructions.'
-name: 'Codacy Findings Review'
+name: codacy-findings-review
+description: Review a local Codacy findings JSON artifact, group by severity and rule, verify false positives carefully, decide whether noisy rules should stay enabled, and propagate confirmed patterns into AI instructions.
+disable-model-invocation: true
 argument-hint: 'Pass the local findings JSON path, for example .codacy/reports/codacy-findings.json'
-agent: '08 - Workflow Orchestrator'
 ---
 
 > **Task Lifecycle**

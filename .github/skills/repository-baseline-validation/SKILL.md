@@ -1,8 +1,8 @@
 ---
-description: 'Assess the repository-wide validation posture by routing a repo-level validation audit to 05 - Validation Strategy.'
-name: 'Repository Baseline Validation'
+name: repository-baseline-validation
+description: Assess the repository-wide validation posture by routing a repo-level validation audit to 05 - Validation Strategy.
+disable-model-invocation: true
 argument-hint: 'Optional validation concerns, critical flows, or repo areas to emphasize'
-agent: '05 - Validation Strategy'
 ---
 
 > **Task Lifecycle**

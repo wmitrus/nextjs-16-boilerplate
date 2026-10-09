@@ -59,10 +59,10 @@ For any Clerk/bootstrap/onboarding or middleware auth-routing review:
 - "Assess whether tenant context is derived safely across proxy, route handlers, and layouts."
 - "Review this auth flow for provider leakage and sensitive-data exposure."
 
-## Available slash prompt
+## Available skill
 
-Real prompt file: [auth-flow-change-review.prompt.md](../../../.github/prompts/auth-flow-change-review.prompt.md)
+Real skill file: [auth-flow-change-review/SKILL.md](../../../.github/skills/auth-flow-change-review/SKILL.md)
 
 ```bash
-/Auth Flow Change Review
+/auth-flow-change-review
 ```

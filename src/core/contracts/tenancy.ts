@@ -15,7 +15,7 @@ export class MissingTenantContextError extends Error {
 /**
  * Thrown when a user is authenticated and the organization exists in DB, but the user
  * has no membership record for that organization.
- * Applies to TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=db.
+ * Membership authority is organization-scoped and independent of TENANCY_MODE.
  * User must be invited or explicitly enrolled before accessing the organization.
  */
 export class TenantMembershipRequiredError extends Error {

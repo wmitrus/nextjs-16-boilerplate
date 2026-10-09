@@ -1,4 +1,3 @@
-import { asc, eq } from 'drizzle-orm';
 import { cookies, headers } from 'next/headers';
 
 import type { Container, Module } from '@/core/container';
@@ -9,7 +8,6 @@ import type {
   RequestIdentitySource,
 } from '@/core/contracts/identity';
 import type { MfaService } from '@/core/contracts/mfa';
-import type { MembershipRepository } from '@/core/contracts/repositories';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import type { DrizzleDb } from '@/core/db';
@@ -25,26 +23,19 @@ import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIde
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
 import { SystemIdentitySource } from './infrastructure/system/SystemIdentitySource';
 
-import { organizationsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
-import type { TenancyMode } from '@/modules/provisioning/domain/tenancy-mode';
 import type { TenantContextSource } from '@/modules/provisioning/domain/tenant-context-source';
 import { OrgDbOrganizationResolver } from '@/modules/provisioning/infrastructure/OrgDbOrganizationResolver';
-import { PersonalOrganizationResolver } from '@/modules/provisioning/infrastructure/PersonalOrganizationResolver';
 import { ProviderOrganizationResolver } from '@/modules/provisioning/infrastructure/ProviderOrganizationResolver';
 import { CompositeActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/CompositeActiveTenantSource';
 import { CookieActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/CookieActiveTenantSource';
 import { HeaderActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/HeaderActiveTenantSource';
-import { SingleTenantResolver } from '@/modules/provisioning/infrastructure/SingleTenantResolver';
 import { DrizzleUserRepository } from '@/modules/user/infrastructure/drizzle/DrizzleUserRepository';
 
 export interface AuthModuleConfig {
   authProvider: 'clerk' | 'authjs' | 'supabase' | 'neon';
-  tenancyMode: TenancyMode;
-  defaultTenantId?: string;
-  tenantContextSource?: TenantContextSource;
+  tenantContextSource: TenantContextSource;
   tenantContextHeader: string;
   tenantContextCookie: string;
-  membershipRepository?: MembershipRepository;
 }
 
 type AuthProvider = AuthModuleConfig['authProvider'];
@@ -90,87 +81,28 @@ function buildMfaService(
 function buildTenantResolver(
   config: AuthModuleConfig,
   identitySource: RequestIdentitySource,
-  lookup: InternalIdentityLookup | undefined,
-  db: DrizzleDb,
+  lookup: InternalIdentityLookup,
 ): TenantResolver {
-  switch (config.tenancyMode) {
-    case 'single': {
-      if (!config.defaultTenantId) {
-        throw new Error(
-          '[authModule] TENANCY_MODE=single requires DEFAULT_TENANT_ID to be set.',
-        );
-      }
-      return new SingleTenantResolver(
-        config.defaultTenantId,
-        async (tenantId) => {
-          const [organization] = await db
-            .select({ id: organizationsTable.id })
-            .from(organizationsTable)
-            .where(eq(organizationsTable.tenantId, tenantId))
-            .orderBy(asc(organizationsTable.id))
-            .limit(1);
+  if (config.tenantContextSource === 'db') {
+    const activeTenantSource = new CompositeActiveTenantSource([
+      new HeaderActiveTenantSource(headers, config.tenantContextHeader),
+      new CookieActiveTenantSource(cookies, config.tenantContextCookie),
+    ]);
 
-          return organization?.id ?? null;
-        },
-      );
-    }
-
-    case 'personal': {
-      if (!lookup) {
-        throw new Error(
-          '[authModule] TENANCY_MODE=personal requires a database connection (InternalIdentityLookup).',
-        );
-      }
-      return new PersonalOrganizationResolver(lookup);
-    }
-
-    case 'org': {
-      if (!config.tenantContextSource) {
-        throw new Error(
-          '[authModule] TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE to be set (provider|db). ' +
-            'Set TENANT_CONTEXT_SOURCE=provider for Clerk Organizations, or TENANT_CONTEXT_SOURCE=db for app-level tenant selection.',
-        );
-      }
-
-      if (config.tenantContextSource === 'db') {
-        if (!config.membershipRepository) {
-          throw new Error(
-            '[authModule] TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=db requires membershipRepository.',
-          );
-        }
-        const activeTenantSource = new CompositeActiveTenantSource([
-          new HeaderActiveTenantSource(headers, config.tenantContextHeader),
-          new CookieActiveTenantSource(cookies, config.tenantContextCookie),
-        ]);
-        return new OrgDbOrganizationResolver(
-          activeTenantSource,
-          config.membershipRepository,
-        );
-      }
-
-      if (config.tenantContextSource === 'provider') {
-        if (!lookup) {
-          throw new Error(
-            '[authModule] TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider requires a database connection.',
-          );
-        }
-        return new ProviderOrganizationResolver(
-          identitySource,
-          lookup,
-          config.authProvider as ExternalAuthProvider,
-        );
-      }
-
-      throw new Error(
-        `[authModule] Unknown TENANT_CONTEXT_SOURCE: ${config.tenantContextSource}`,
-      );
-    }
-
-    default:
-      throw new Error(
-        `[authModule] Unknown TENANCY_MODE: ${config.tenancyMode}`,
-      );
+    return new OrgDbOrganizationResolver(activeTenantSource);
   }
+
+  if (config.tenantContextSource === 'provider') {
+    return new ProviderOrganizationResolver(
+      identitySource,
+      lookup,
+      config.authProvider as ExternalAuthProvider,
+    );
+  }
+
+  throw new Error(
+    `[authModule] Unknown TENANT_CONTEXT_SOURCE: ${config.tenantContextSource}`,
+  );
 }
 
 export function createAuthModule(config: AuthModuleConfig): Module {
@@ -191,7 +123,6 @@ export function createAuthModule(config: AuthModuleConfig): Module {
         config,
         identitySource,
         lookup,
-        db,
       );
 
       container.register(AUTH.IDENTITY_SOURCE, identitySource);

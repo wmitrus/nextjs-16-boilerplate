@@ -1,3 +1,4 @@
+import type { OrganizationScopeAuthority } from '@/core/contracts/access-scope-authority';
 import type {
   Identity,
   IdentityProvider,
@@ -15,8 +16,6 @@ import type { User, UserRepository } from '@/core/contracts/user';
 
 import { isSessionRevoked } from './session-revocation';
 
-export type ProvisioningTenancyMode = 'single' | 'personal' | 'org';
-
 export type NodeProvisioningAccessStatus =
   | 'ALLOWED'
   | 'UNAUTHENTICATED'
@@ -32,7 +31,6 @@ export type NodeProvisioningDenyCode =
   | 'ONBOARDING_INCOMPLETE'
   | 'ACCOUNT_DISABLED'
   | 'TENANT_CONTEXT_REQUIRED'
-  | 'DEFAULT_TENANT_NOT_FOUND'
   | 'TENANT_MEMBERSHIP_REQUIRED'
   | 'FORBIDDEN';
 
@@ -54,7 +52,6 @@ export interface NodeProvisioningAccessDiagnostics {
   readonly externalOrgId?: string;
   readonly internalIdentityId?: string;
   readonly internalOrganizationId?: string;
-  readonly tenancyMode: ProvisioningTenancyMode;
   readonly userRecordExists: boolean | null;
   readonly tenantRecordExists: boolean | null;
   readonly membershipExists: boolean | null;
@@ -68,6 +65,10 @@ export interface NodeProvisioningAccessAllowed {
   readonly status: 'ALLOWED';
   readonly identity: Identity;
   readonly tenant: TenantContext;
+  readonly activeOrganization: {
+    readonly organizationId: string;
+    readonly tenantId: string;
+  };
   readonly user: User;
   readonly diagnostics: NodeProvisioningAccessDiagnostics;
 }
@@ -86,10 +87,9 @@ export type NodeProvisioningAccessOutcome =
 interface NodeProvisioningAccessDependencies {
   readonly identityProvider: IdentityProvider;
   readonly tenantResolver: TenantResolver;
+  readonly organizationScopeAuthority: OrganizationScopeAuthority;
   readonly userRepository: UserRepository;
-  readonly tenancyMode: ProvisioningTenancyMode;
   readonly rawIdentity?: RequestIdentitySourceData;
-  readonly tenantExistsProbe?: (tenantId: string) => Promise<boolean>;
   readonly authorize?: (context: {
     readonly identity: Identity;
     readonly tenant: TenantContext;
@@ -117,7 +117,6 @@ export async function evaluateNodeProvisioningAccess(
         diagnostics: {
           externalUserId,
           externalOrgId,
-          tenancyMode: deps.tenancyMode,
           userRecordExists: false,
           tenantRecordExists: null,
           membershipExists: null,
@@ -139,7 +138,6 @@ export async function evaluateNodeProvisioningAccess(
       diagnostics: {
         externalUserId,
         externalOrgId,
-        tenancyMode: deps.tenancyMode,
         userRecordExists: null,
         tenantRecordExists: null,
         membershipExists: null,
@@ -163,7 +161,6 @@ export async function evaluateNodeProvisioningAccess(
         externalUserId,
         externalOrgId,
         internalIdentityId: identity.id,
-        tenancyMode: deps.tenancyMode,
         userRecordExists: false,
         tenantRecordExists: null,
         membershipExists: null,
@@ -195,7 +192,6 @@ export async function evaluateNodeProvisioningAccess(
         externalUserId,
         externalOrgId,
         internalIdentityId: identity.id,
-        tenancyMode: deps.tenancyMode,
         userRecordExists: true,
         tenantRecordExists: null,
         membershipExists: null,
@@ -227,7 +223,6 @@ export async function evaluateNodeProvisioningAccess(
       diagnostics: {
         externalUserId,
         externalOrgId,
-        tenancyMode: deps.tenancyMode,
         userRecordExists: true,
         tenantRecordExists: null,
         membershipExists: null,
@@ -249,7 +244,6 @@ export async function evaluateNodeProvisioningAccess(
         externalUserId,
         externalOrgId,
         internalIdentityId: identity.id,
-        tenancyMode: deps.tenancyMode,
         userRecordExists: true,
         tenantRecordExists: null,
         membershipExists: null,
@@ -277,7 +271,6 @@ export async function evaluateNodeProvisioningAccess(
           externalUserId,
           externalOrgId,
           internalIdentityId: identity.id,
-          tenancyMode: deps.tenancyMode,
           userRecordExists: true,
           tenantRecordExists: false,
           membershipExists: null,
@@ -298,7 +291,6 @@ export async function evaluateNodeProvisioningAccess(
           externalUserId,
           externalOrgId,
           internalIdentityId: identity.id,
-          tenancyMode: deps.tenancyMode,
           userRecordExists: true,
           tenantRecordExists: true,
           membershipExists: false,
@@ -313,30 +305,56 @@ export async function evaluateNodeProvisioningAccess(
     throw error;
   }
 
-  if (deps.tenancyMode === 'single' && deps.tenantExistsProbe) {
-    const tenantExists = await deps.tenantExistsProbe(tenant.tenantId);
-    if (!tenantExists) {
-      return {
-        status: 'TENANT_CONTEXT_REQUIRED',
-        code: 'DEFAULT_TENANT_NOT_FOUND',
-        message:
-          'Default tenant from configuration does not exist in database. Fix DEFAULT_TENANT_ID seed/config mismatch.',
-        diagnostics: {
-          externalUserId,
-          externalOrgId,
-          internalIdentityId: identity.id,
-          internalOrganizationId: tenant.organizationId,
-          tenancyMode: deps.tenancyMode,
-          userRecordExists: true,
-          tenantRecordExists: false,
-          membershipExists: null,
-          onboardingStateExists: true,
-          onboardingComplete: true,
-          provisioningRequired: false,
-          reason: 'missing_tenant',
-        },
-      };
-    }
+  const parentTenantId =
+    await deps.organizationScopeAuthority.readParentTenantId(
+      tenant.organizationId,
+    );
+
+  if (parentTenantId === null) {
+    return {
+      status: 'TENANT_CONTEXT_REQUIRED',
+      code: 'TENANT_CONTEXT_REQUIRED',
+      message: 'Tenant context required.',
+      diagnostics: {
+        externalUserId,
+        externalOrgId,
+        internalIdentityId: identity.id,
+        internalOrganizationId: tenant.organizationId,
+        userRecordExists: true,
+        tenantRecordExists: false,
+        membershipExists: null,
+        onboardingStateExists: true,
+        onboardingComplete: true,
+        provisioningRequired: false,
+        reason: 'missing_tenant',
+      },
+    };
+  }
+
+  const isMember = await deps.organizationScopeAuthority.isMember(
+    identity.id,
+    tenant.organizationId,
+  );
+
+  if (!isMember) {
+    return {
+      status: 'TENANT_MEMBERSHIP_REQUIRED',
+      code: 'TENANT_MEMBERSHIP_REQUIRED',
+      message: 'Tenant membership required.',
+      diagnostics: {
+        externalUserId,
+        externalOrgId,
+        internalIdentityId: identity.id,
+        internalOrganizationId: tenant.organizationId,
+        userRecordExists: true,
+        tenantRecordExists: true,
+        membershipExists: false,
+        onboardingStateExists: true,
+        onboardingComplete: true,
+        provisioningRequired: false,
+        reason: 'missing_membership',
+      },
+    };
   }
 
   if (deps.authorize) {
@@ -351,7 +369,6 @@ export async function evaluateNodeProvisioningAccess(
           externalOrgId,
           internalIdentityId: identity.id,
           internalOrganizationId: tenant.organizationId,
-          tenancyMode: deps.tenancyMode,
           userRecordExists: true,
           tenantRecordExists: true,
           membershipExists: true,
@@ -368,13 +385,16 @@ export async function evaluateNodeProvisioningAccess(
     status: 'ALLOWED',
     identity,
     tenant,
+    activeOrganization: {
+      organizationId: tenant.organizationId,
+      tenantId: parentTenantId,
+    },
     user,
     diagnostics: {
       externalUserId,
       externalOrgId,
       internalIdentityId: identity.id,
       internalOrganizationId: tenant.organizationId,
-      tenancyMode: deps.tenancyMode,
       userRecordExists: true,
       tenantRecordExists: true,
       membershipExists: true,

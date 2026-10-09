@@ -57,13 +57,8 @@ export async function resolveAuditLogsAdminScope(
     throw new AuditLogsScopeInvariantError();
   }
 
-  const activeOrganizationId = access.tenant.organizationId;
-  const parentTenantId =
-    await authority.readParentTenantId(activeOrganizationId);
-
-  if (parentTenantId === null) {
-    throw new AuditLogsScopeInvariantError();
-  }
+  const activeOrganizationId = access.activeOrganization.organizationId;
+  const parentTenantId = access.activeOrganization.tenantId;
 
   let accessContext: AccessContext;
   try {

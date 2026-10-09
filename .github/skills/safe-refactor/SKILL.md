@@ -1,8 +1,8 @@
 ---
-description: 'Start a behavior-preserving refactor task through the Workflow Orchestrator using the safe-refactor workflow sequence.'
-name: 'Safe Refactor'
+name: safe-refactor
+description: Start a behavior-preserving refactor task through the Workflow Orchestrator using the safe-refactor workflow sequence.
+disable-model-invocation: true
 argument-hint: 'Refactor description, affected modules, expected invariants to protect, or known risks'
-agent: 08 - Workflow Orchestrator
 ---
 
 > **Task Lifecycle**

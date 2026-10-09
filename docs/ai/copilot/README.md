@@ -37,13 +37,13 @@ Real agent files:
 - [validation-strategy.agent.md](../../../.github/agents/validation-strategy.agent.md)
 - [debug-investigation.agent.md](../../../.github/agents/debug-investigation.agent.md)
 
-### Prompt
+### Skill
 
-A prompt is a reusable slash command.
+A skill is a reusable slash command.
 
-In this repository, prompts live in `.github/prompts/` and usually route work to a specific agent with a fixed workflow.
+In this repository, skills live in `.github/skills/<name>/SKILL.md` and usually route work to a specific agent with a fixed workflow. They are invoked explicitly as `/<name>`; the target agent is named in the skill body.
 
-Use a prompt when you want a repeatable entrypoint for a common task such as:
+Use a skill when you want a repeatable entrypoint for a common task such as:
 
 - auth-flow review
 - change validation
@@ -89,21 +89,23 @@ Recommended starting points:
 - multi-step coordination across specialists and artifacts: [08 - Workflow Orchestrator Agent.md](./08%20-%20Workflow%20Orchestrator%20Agent.md)
 - writing the requirements package that drives the whole workflow: [09 - Task Brief Authoring.md](./09%20-%20Task%20Brief%20Authoring.md)
 
-## Available Slash Prompts
+## Available Skills
 
-These prompts currently exist in `.github/prompts/`:
+These skills currently exist in `.github/skills/`:
 
-- `/Auth Flow Change Review` → [auth-flow-change-review.prompt.md](../../../.github/prompts/auth-flow-change-review.prompt.md)
-- `/Change Validation` → [change-validation.prompt.md](../../../.github/prompts/change-validation.prompt.md)
-- `/Debug Investigation` → [debug-investigation.prompt.md](../../../.github/prompts/debug-investigation.prompt.md)
-- `/Incident Investigation` → [incident-investigation.prompt.md](../../../.github/prompts/incident-investigation.prompt.md)
-- `/Playwright E2E Validation` → [playwright-e2e-validation.prompt.md](../../../.github/prompts/playwright-e2e-validation.prompt.md)
-- `/Repository Baseline Validation` → [repository-baseline-validation.prompt.md](../../../.github/prompts/repository-baseline-validation.prompt.md)
-- `/Safe Refactor` → [safe-refactor.prompt.md](../../../.github/prompts/safe-refactor.prompt.md)
-- `/Security Incident` → [security-incident.prompt.md](../../../.github/prompts/security-incident.prompt.md)
-- `/Workflow Task` → [workflow-task.prompt.md](../../../.github/prompts/workflow-task.prompt.md)
+- `/auth-flow-change-review` → [auth-flow-change-review/SKILL.md](../../../.github/skills/auth-flow-change-review/SKILL.md)
+- `/change-validation` → [change-validation/SKILL.md](../../../.github/skills/change-validation/SKILL.md)
+- `/codacy-findings-review` → [codacy-findings-review/SKILL.md](../../../.github/skills/codacy-findings-review/SKILL.md)
+- `/codacy-security-review` → [codacy-security-review/SKILL.md](../../../.github/skills/codacy-security-review/SKILL.md)
+- `/debug-investigation` → [debug-investigation/SKILL.md](../../../.github/skills/debug-investigation/SKILL.md)
+- `/incident-investigation` → [incident-investigation/SKILL.md](../../../.github/skills/incident-investigation/SKILL.md)
+- `/playwright-e2e-validation` → [playwright-e2e-validation/SKILL.md](../../../.github/skills/playwright-e2e-validation/SKILL.md)
+- `/repository-baseline-validation` → [repository-baseline-validation/SKILL.md](../../../.github/skills/repository-baseline-validation/SKILL.md)
+- `/safe-refactor` → [safe-refactor/SKILL.md](../../../.github/skills/safe-refactor/SKILL.md)
+- `/security-incident` → [security-incident/SKILL.md](../../../.github/skills/security-incident/SKILL.md)
+- `/workflow-task` → [workflow-task/SKILL.md](../../../.github/skills/workflow-task/SKILL.md)
 
-Use prompts when you want a ready-made workflow instead of invoking a specialist manually.
+Use skills when you want a ready-made workflow instead of invoking a specialist manually.
 
 ## Recommended Universal Flow
 
@@ -113,12 +115,12 @@ Recommended operating model:
 
 1. Write a task brief or requirements doc for the specific task.
 2. Reference any scenario matrix, checklist, acceptance criteria, or supporting docs.
-3. Start `/Workflow Task` and provide the description plus the relevant files.
+3. Start `/workflow-task` and provide the description plus the relevant files.
 4. Let the orchestrator create `.copilot/tasks/{task_id}/plan.md` and `intake.md`.
 5. Let the orchestrator route to the right specialists.
-6. If browser evidence is required, use `/Playwright E2E Validation` or let the orchestrator invoke `07 - Playwright E2E`.
+6. If browser evidence is required, use `/playwright-e2e-validation` or let the orchestrator invoke `07 - Playwright E2E`.
 
-Keep one-off task rules in the task brief, not in a one-off prompt.
+Keep one-off task rules in the task brief, not in a one-off skill.
 
 ## Repository Guardrails
 

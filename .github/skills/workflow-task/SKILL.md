@@ -1,8 +1,8 @@
 ---
-description: 'Start a universal multi-step workflow task from the provided description, requirements, attached files, and repository context.'
-name: 'Workflow Task'
+name: workflow-task
+description: Start a universal multi-step workflow task from the provided description, requirements, attached files, and repository context.
+disable-model-invocation: true
 argument-hint: 'Task description, requirements summary, referenced files, risks, scenarios, or environment notes'
-agent: '08 - Workflow Orchestrator'
 ---
 
 > **Task Lifecycle**

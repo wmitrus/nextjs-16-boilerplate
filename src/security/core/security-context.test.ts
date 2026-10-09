@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { AUTH } from '@/core/contracts';
+import type { OrganizationScopeAuthority } from '@/core/contracts/access-scope-authority';
 import { UserNotProvisionedError } from '@/core/contracts/identity';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import {
@@ -23,6 +24,7 @@ describe('Security Context', () => {
   let identityProvider: IdentityProvider;
   let tenantResolver: TenantResolver;
   let userRepository: UserRepository;
+  let organizationScopeAuthority: OrganizationScopeAuthority;
 
   // Sessions in these tests are "current" unless a test says otherwise: a
   // far-future issue time can never be older than a revocation marker, so
@@ -34,6 +36,7 @@ describe('Security Context', () => {
     identityProvider,
     tenantResolver,
     userRepository,
+    organizationScopeAuthority,
     requestIdentitySource: {
       get: () => Promise.resolve({ sessionIssuedAt }),
     },
@@ -47,6 +50,10 @@ describe('Security Context', () => {
     );
     tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
     userRepository = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
+    organizationScopeAuthority = {
+      readParentTenantId: vi.fn().mockResolvedValue('parent-tenant'),
+      isMember: vi.fn().mockResolvedValue(true),
+    };
     sessionIssuedAt = Math.floor(Date.now() / 1000) + 60;
     resetAllInfrastructureMocks();
     vi.clearAllMocks();
@@ -323,6 +330,51 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.readinessStatus).not.toBe('UNAUTHENTICATED');
+  });
+
+  it('fails closed when the selected organization has no canonical parent tenant', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_missing_parent',
+    });
+    vi.mocked(tenantResolver.resolve).mockResolvedValue({
+      organizationId: 'org_missing_parent',
+      tenantId: 'org_missing_parent',
+      userId: 'user_missing_parent',
+    });
+    vi.mocked(organizationScopeAuthority.readParentTenantId).mockResolvedValue(
+      null,
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_CONTEXT_REQUIRED');
+    expect(organizationScopeAuthority.isMember).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the authenticated user is not a member of the selected organization', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_cross_org',
+    });
+    vi.mocked(tenantResolver.resolve).mockResolvedValue({
+      organizationId: 'org_foreign',
+      tenantId: 'org_foreign',
+      userId: 'user_cross_org',
+    });
+    vi.mocked(organizationScopeAuthority.isMember).mockResolvedValue(false);
+
+    mockNextHeaders.mockReturnValue(new Headers());
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_MEMBERSHIP_REQUIRED');
+    expect(organizationScopeAuthority.isMember).toHaveBeenCalledWith(
+      'user_cross_org',
+      'org_foreign',
+    );
   });
 
   it('should return user=undefined when tenant membership is required (TenantMembershipRequiredError)', async () => {

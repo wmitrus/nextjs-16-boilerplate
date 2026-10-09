@@ -73,6 +73,10 @@ vi.mock('../src/core/runtime/bootstrap', async () => {
   });
   container.register(AUTHORIZATION.MEMBERSHIP_REPOSITORY, {});
   container.register(AUTHORIZATION.POLICY_REPOSITORY, {});
+  container.register(AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY, {
+    readParentTenantId: vi.fn().mockResolvedValue('test-parent-tenant'),
+    isMember: vi.fn().mockResolvedValue(true),
+  });
 
   return {
     createApp: vi.fn(() => container),

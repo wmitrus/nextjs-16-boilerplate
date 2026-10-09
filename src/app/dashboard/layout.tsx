@@ -83,7 +83,6 @@ export async function DashboardLayoutGuard({
       authenticatedExternalUserId: access.diagnostics.externalUserId,
       internalIdentityId: access.diagnostics.internalIdentityId,
       internalOrganizationId: access.diagnostics.internalOrganizationId,
-      tenancyMode: access.diagnostics.tenancyMode,
       userRecordExists: access.diagnostics.userRecordExists,
       tenantRecordExists: access.diagnostics.tenantRecordExists,
       membershipExists: access.diagnostics.membershipExists,
@@ -111,7 +110,9 @@ export async function DashboardLayoutGuard({
   }
 
   if (access.status === 'TENANT_CONTEXT_REQUIRED') {
-    redirect('/auth/bootstrap?reason=tenant-lost');
+    redirect(
+      `/auth/bootstrap/start?redirect_url=${encodeURIComponent('/dashboard')}`,
+    );
   }
 
   if (

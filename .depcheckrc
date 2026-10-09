@@ -10,7 +10,6 @@
     "@lhci/cli",
     "@commitlint/cli",
     "@commitlint/config-conventional",
-    "@continuedev/cli",
     "@eslint/eslintrc",
     "@logtail/pino",
     "@semantic-release/changelog",

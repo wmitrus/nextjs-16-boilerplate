@@ -30,16 +30,15 @@ overrides:
   'cosmiconfig>yaml': '>=2.8.3'
   'docker-compose>yaml': '>=2.8.3'
   'lint-staged>yaml': '>=2.8.3'
-  handlebars: '>=4.7.9'
+  # GHSA-8r5x-fm3f-whwj / GHSA-p8wg-vrv2-v86f / GHSA-xw65-4hp5-5hc7:
+  # JavaScript injection in compile/precompile, fixed in 4.7.10.
+  handlebars: '>=4.7.10'
   lodash-es: '>=4.18.0'
   'fast-uri@>=2.3.1 <2.4.3': 2.4.3
   'fast-uri@>=3.0.0 <3.1.8': 3.1.8
   'fast-uri@>=4.0.0 <4.1.1': 4.1.1
-  'next@>=16.0.0 <16.2.5': '>=16.2.5'
-  'next@>=16.0.0 <16.2.6': '>=16.2.6'
   # GHSA-vcvr-r3jv-pc5j (next/og ImageResponse remote RCE): fixed in 16.3.6.
   'next@>=16.0.0 <16.3.6': '>=16.3.6'
-  'ws@>=8.0.0 <8.20.1': '>=8.20.1'
   # GHSA-qhr7-859c-m2p7 / GHSA-6j4f-fj2g-mc7p: nested-brace DoS fixes.
   'brace-expansion@<1.1.21': 1.1.21
   'brace-expansion@>=2.0.0 <2.1.7': 2.1.7
@@ -57,19 +56,15 @@ overrides:
   # js-yaml <4.3.1 advisory this line previously pinned to 4.3.1.)
   'js-yaml@<4.3.2': 4.3.2
   'js-yaml@>=5.0.0 <5.2.1': 5.2.1
-  'nodemailer@<=8.0.8': '>=8.0.9'
-  'nodemailer@<=8.0.7': '>=8.0.8'
   '@opentelemetry/core@<2.8.0': '>=2.8.0'
-  'undici@>=7.23.0 <7.29.1': '>=7.29.1 <8'
   'nodemailer@<=9.0.0': '>=9.0.1'
   'undici@>=7.0.0 <7.29.1': '>=7.29.1 <8'
   # GHSA-2x7j-588g-ccc2: quadratic-time ReDoS in nodemailer addressparser,
   # fixed in 9.1.0. Covers the residual 9.0.x window left by the line above.
   'nodemailer@>=9.0.0 <9.1.0': '>=9.1.0'
-  # GHSA-rgj7-g3m4-5g8c: libheif vulns reachable through sharp's HEIF
-  # decoder, fixed in sharp 0.35.4. Was previously pinned to an exact
-  # 0.35.0 here, which is what held the transitive `next > sharp` back.
-  'next>sharp': '>=0.35.4'
+  # GHSA-wq5f-xc86-pv6w: librsvg vuln reachable through sharp, fixed in
+  # 0.35.5. (Subsumes the earlier >=0.35.4 floor for GHSA-rgj7-g3m4-5g8c.)
+  'next>sharp': '>=0.35.5'
   '@vitest/browser@>=4.0.0 <4.1.11': 4.1.11
   'vitest@>=2.1.0 <4.1.11': 4.1.11
   '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
@@ -79,40 +74,28 @@ overrides:
   'minimatch@>=10.0.0 <10.2.3': 10.2.3
   'path-to-regexp@>=6.0.0 <6.3.0': 6.3.0
   'path-to-regexp@>=8.0.0 <8.4.0': 8.4.0
-  # GHSA-7w5x-hrqm-74c2: DoS via malformed TOML documents in smol-toml,
-  # fixed in 1.7.1. (Widened from the earlier <1.6.1 pin.) Dev-only: reached
-  # exclusively through the `vercel` CLI's @vercel/python-analysis.
-  'smol-toml@<1.7.1': '>=1.7.1'
+  # GHSA-r4xh-jqrq-34v2: quadratic-time parse() in smol-toml, fixed in 1.9.0.
+  # (Widened from the earlier <1.7.1 pin for GHSA-7w5x-hrqm-74c2.) Dev-only:
+  # reached exclusively through the `vercel` CLI.
+  'smol-toml@<1.9.0': '>=1.9.0'
   'tar@>=7.0.0 <7.5.21': 7.5.21
   'browserslist@<4.28.7': '>=4.28.7'
   '@humanfs/node@<0.16.8': '>=0.16.8'
   'qs@>=6.14.0 <6.16.0': 6.16.0
+  # GHSA-68fv-2mgg-jv7q: event-loop DoS via indexed source-map sections.
+  'source-map-js@<1.2.2': '>=1.2.2'
+  # GHSA-jqcg-44mw-7w3h: IP spoofing via IPv4-mapped IPv6 trust subnet.
+  'proxy-addr@<2.0.8': '>=2.0.8'
+  # GHSA-vc2v-76pw-4v95: memory leak on premature response close.
+  'compression@<1.8.2': '>=1.8.2'
+  # GHSA-jggr-w7fw-pc2j: stack exhaustion on deeply-nested values.
+  'fast-copy@>=4.0.0 <4.1.0': '>=4.1.0'
+  # GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq: fixed in image-size 2.0.3.
+  'image-size@>=2.0.0 <2.0.3': '>=2.0.3'
 
 audit:
-  # --- GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq (image-size@2.0.2) ---
-  # Reason: both advisories are in `image-size`, upstream published only
-  # 2.0.2 as of this writing -- 2.0.3 (the advisory fix) does not exist on
-  # npm yet, so there is no newer version to bump to. Re-check
-  # `npm view image-size versions` periodically; bump the moment a fixed
-  # version publishes.
-  # Dependency path (confirmed via `pnpm why image-size`, 2026-08-22):
-  #   image-size@2.0.2
-  #   └─ vite-plugin-storybook-nextjs@3.1.9
-  #      └─ @storybook/nextjs-vite@10.2.13
-  #         └─ this repo (devDependencies)
-  # Dev-only proof: reached exclusively through @storybook/nextjs-vite, a
-  # devDependency -- Storybook's build/dev tooling never ships into the
-  # production Next.js bundle or a deployed server, so this advisory has no
-  # production attack surface in this repo regardless of its severity.
-  # Owner: repository maintainers (wmitrus) -- re-review on every quarterly
-  # dependency-audit pass, not just when this comment is read.
-  # Review expiry: 2026-11-22 (quarterly) -- if still unresolved upstream
-  # at that date, re-confirm the dev-only reachability proof still holds
-  # (a future refactor could theoretically pull @storybook/nextjs-vite into
-  # a non-dev path) rather than silently re-extending the ignore.
-  #
   # --- GHSA-jmr9-qjv8-65gv (extract-zip@2.0.1, symlink path traversal) ---
-  # Reason: same upstream-blocked shape as the two exceptions above --
+  # Reason: upstream-blocked --
   # 2.0.2 (the advisory's patched version) does not exist on npm yet
   # (`npm view extract-zip versions` tops out at 2.0.1 as of this
   # writing). Surfaced by pinning @lhci/cli (A.8 SEC-32 follow-up,
@@ -174,18 +157,9 @@ audit:
   # Review expiry: 2027-01-05.
   #
   ignore:
-    - GHSA-w3rx-r6r6-pgpr
-    - GHSA-5p2g-fcmc-qvqq
     - GHSA-jmr9-qjv8-65gv
     - GHSA-7pqw-9j4j-h8q3
     - GHSA-vfj7-8cjw-p6xm
-
-onlyBuiltDependencies:
-  - '@clerk/shared'
-  - '@sentry-internal/node-cpu-profiler'
-  - protobufjs
-  - sharp
-  - unrs-resolver
 
 patchedDependencies:
   depcheck@1.4.7: patches/depcheck@1.4.7.patch
@@ -206,38 +180,3 @@ allowBuilds:
   sharp: true
   ssh2: true
   unrs-resolver: true
-
-minimumReleaseAgeExclude:
-  - brace-expansion@1.1.17 || 2.1.3
-  - '@vercel/backends@0.8.37'
-  - '@vercel/build-utils@14.1.0'
-  - '@vercel/cervel@0.1.45'
-  - '@vercel/elysia@0.1.114'
-  - '@vercel/express@0.1.128'
-  - '@vercel/fastify@0.1.117'
-  - '@vercel/gatsby-plugin-vercel-builder@2.2.40'
-  - '@vercel/h3@0.1.123'
-  - '@vercel/hono@0.2.117'
-  - '@vercel/koa@0.1.97'
-  - '@vercel/nestjs@0.2.118'
-  - '@vercel/next@4.21.4'
-  - '@vercel/node@5.10.0'
-  - '@vercel/static-build@2.12.6'
-  - '@vercel/vc-native-darwin-arm64@59.0.0'
-  - '@vercel/vc-native-darwin-x64@59.0.0'
-  - '@vercel/vc-native-linux-arm64@59.0.0'
-  - '@vercel/vc-native-linux-x64@59.0.0'
-  - vercel@59.0.0
-  - '@next/env@16.3.4'
-  - '@next/eslint-plugin-next@16.3.4'
-  - '@next/swc-darwin-arm64@16.3.4'
-  - '@next/swc-darwin-x64@16.3.4'
-  - '@next/swc-linux-arm64-gnu@16.3.4'
-  - '@next/swc-linux-arm64-musl@16.3.4'
-  - '@next/swc-linux-x64-gnu@16.3.4'
-  - '@next/swc-linux-x64-musl@16.3.4'
-  - '@next/swc-win32-arm64-msvc@16.3.4'
-  - '@next/swc-win32-x64-msvc@16.3.4'
-  - eslint-config-next@16.3.4
-  - next@16.3.4
-  - fast-uri@3.1.7

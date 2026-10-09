@@ -1,7 +1,7 @@
 import os from 'node:os';
 
 import { withBetterStackNextConfig } from '@logtail/next';
-import { withSentryConfig } from '@sentry/nextjs';
+import { withSentryConfig } from '@sentry/nextjs/config';
 import type { NextConfig } from 'next';
 
 const buildWorkerCpuLimit = Math.min(

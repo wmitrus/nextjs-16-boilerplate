@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { connection } from 'next/server';
 
 class SentryExampleAPIError extends Error {
   constructor(message: string | undefined) {
@@ -9,6 +10,7 @@ class SentryExampleAPIError extends Error {
 
 // A faulty API route to test Sentry's error monitoring
 export async function GET() {
+  await connection();
   Sentry.logger.info('Sentry example API called');
   try {
     throw new SentryExampleAPIError(

@@ -1,3 +1,11 @@
+## [2.21.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.21.0...v2.21.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **deps:** resolve pnpm audit findings and prune stale workspace config ([cbc8258](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cbc8258f81fbad8a302e65c08dcb9941fb455264))
+* **tenancy:** close canonical runtime review gaps ([f5a114f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f5a114f07b18972a3476dde6282a301c563624ea))
+
 # [2.21.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.20.0...v2.21.0) (2026-10-05)
 
 

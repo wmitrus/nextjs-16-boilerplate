@@ -3,6 +3,7 @@
 import { z } from 'zod';
 
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { OrganizationScopeAuthority } from '@/core/contracts/access-scope-authority';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type {
   IdentityProvider,
@@ -34,6 +35,10 @@ function createSecurityDependencies() {
     userRepository: requestContainer.resolve<UserRepository>(
       AUTH.USER_REPOSITORY,
     ),
+    organizationScopeAuthority:
+      requestContainer.resolve<OrganizationScopeAuthority>(
+        AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY,
+      ),
     requestIdentitySource: requestContainer.resolve<RequestIdentitySource>(
       AUTH.IDENTITY_SOURCE,
     ),

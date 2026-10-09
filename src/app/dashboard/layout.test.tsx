@@ -101,6 +101,27 @@ describe('DashboardLayoutGuard', () => {
     );
   });
 
+  it('routes missing tenant context through bootstrap to restore active organization', async () => {
+    resolveNodeProvisioningAccessMock.mockResolvedValue({
+      status: 'TENANT_CONTEXT_REQUIRED',
+      code: 'TENANT_CONTEXT_REQUIRED',
+      message: 'Tenant context required',
+      diagnostics: {
+        ...diagnostics,
+        userRecordExists: true,
+        onboardingStateExists: true,
+        onboardingComplete: true,
+        reason: 'missing_tenant',
+      },
+    });
+
+    await expect(
+      DashboardLayoutGuard({ children: <div>content</div> }),
+    ).rejects.toThrow(
+      'REDIRECT:/auth/bootstrap/start?redirect_url=%2Fdashboard',
+    );
+  });
+
   it('redirects a deactivated user (FORBIDDEN/ACCOUNT_DISABLED) away from the dashboard (SEC-33)', async () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'FORBIDDEN',

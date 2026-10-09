@@ -11,7 +11,7 @@ export const GET = withErrorHandler(
     const snapshot: ProvisioningStatusSnapshot = {
       authenticated: true,
       internalUserId: access.identity.id,
-      internalOrganizationId: access.tenant.organizationId,
+      internalOrganizationId: access.activeOrganization.organizationId,
       onboardingComplete: access.user.onboardingComplete,
       tenantContextSource: env.TENANT_CONTEXT_SOURCE ?? 'db',
     };

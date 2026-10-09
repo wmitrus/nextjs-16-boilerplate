@@ -57,6 +57,7 @@ export async function createSecurityContext(
     identityProvider,
     tenantResolver,
     userRepository,
+    organizationScopeAuthority,
     requestIdentitySource,
   } = dependencies;
 
@@ -166,6 +167,32 @@ export async function createSecurityContext(
 
   try {
     const tenantContext = await tenantResolver.resolve(identity);
+
+    const parentTenantId = await organizationScopeAuthority.readParentTenantId(
+      tenantContext.organizationId,
+    );
+
+    if (parentTenantId === null) {
+      return {
+        ...baseContext,
+        user: undefined,
+        readinessStatus: 'TENANT_CONTEXT_REQUIRED',
+      };
+    }
+
+    const isMember = await organizationScopeAuthority.isMember(
+      identity.id,
+      tenantContext.organizationId,
+    );
+
+    if (!isMember) {
+      return {
+        ...baseContext,
+        user: undefined,
+        readinessStatus: 'TENANT_MEMBERSHIP_REQUIRED',
+      };
+    }
+
     return {
       ...baseContext,
       user: {

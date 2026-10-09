@@ -110,7 +110,9 @@ export async function DashboardLayoutGuard({
   }
 
   if (access.status === 'TENANT_CONTEXT_REQUIRED') {
-    redirect('/auth/bootstrap?reason=tenant-lost');
+    redirect(
+      `/auth/bootstrap/start?redirect_url=${encodeURIComponent('/dashboard')}`,
+    );
   }
 
   if (

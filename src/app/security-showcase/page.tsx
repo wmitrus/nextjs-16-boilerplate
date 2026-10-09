@@ -1,7 +1,8 @@
 import { headers } from 'next/headers';
 import { Suspense } from 'react';
 
-import { AUTH } from '@/core/contracts';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { OrganizationScopeAuthority } from '@/core/contracts/access-scope-authority';
 import type {
   IdentityProvider,
   RequestIdentitySource,
@@ -93,6 +94,10 @@ export async function SecurityShowcasePageContent() {
       userRepository: requestContainer.resolve<UserRepository>(
         AUTH.USER_REPOSITORY,
       ),
+      organizationScopeAuthority:
+        requestContainer.resolve<OrganizationScopeAuthority>(
+          AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY,
+        ),
       requestIdentitySource: requestContainer.resolve<RequestIdentitySource>(
         AUTH.IDENTITY_SOURCE,
       ),

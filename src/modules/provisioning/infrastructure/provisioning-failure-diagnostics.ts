@@ -5,6 +5,8 @@ import {
   CrossProviderLinkingNotAllowedError,
   MissingProvisioningInputError,
   TenantContextRequiredError,
+  TenantOrganizationLimitReachedError,
+  TenantOrganizationQuotaNotConfiguredError,
   TenantUserLimitReachedError,
 } from '../domain/errors';
 
@@ -14,6 +16,8 @@ export type ProvisioningFailureCode =
   | 'TENANT_CONTEXT_REQUIRED'
   | 'TENANT_MEMBERSHIP_REQUIRED'
   | 'TENANT_NOT_PROVISIONED'
+  | 'TENANT_ORGANIZATION_LIMIT_REACHED'
+  | 'TENANT_ORGANIZATION_QUOTA_NOT_CONFIGURED'
   | 'TENANT_USER_LIMIT_REACHED'
   | 'UNKNOWN_PROVISIONING_ERROR';
 
@@ -48,6 +52,26 @@ export function classifyProvisioningFailure(
         'Increase the tenant user limit or remove inactive memberships before retrying sign-in.',
       userFacingError: 'quota_exceeded',
       severity: 'warn',
+    };
+  }
+
+  if (err instanceof TenantOrganizationLimitReachedError) {
+    return {
+      failureCode: 'TENANT_ORGANIZATION_LIMIT_REACHED',
+      operatorAction:
+        'Increase tenant_attributes.maxOrganizations or remove an organization before retrying.',
+      userFacingError: 'quota_exceeded',
+      severity: 'warn',
+    };
+  }
+
+  if (err instanceof TenantOrganizationQuotaNotConfiguredError) {
+    return {
+      failureCode: 'TENANT_ORGANIZATION_QUOTA_NOT_CONFIGURED',
+      operatorAction:
+        'Ensure the tenant has a tenant_attributes row with maxOrganizations configured.',
+      userFacingError: 'tenant_config',
+      severity: 'error',
     };
   }
 

@@ -49,6 +49,8 @@ export interface ProvisioningResult {
  * INVARIANT: Never escalates an existing membership role.
  * INVARIANT: Never inserts wildcard policies (resource='*' or actions=['*']).
  * INVARIANT: Enforces free-tier user limits before new membership inserts.
+ * INVARIANT: Organization creation is delegated to the canonical quota-safe
+ * OrganizationCreationService.
  */
 export interface ProvisioningService {
   ensureProvisioned(input: ProvisioningInput): Promise<ProvisioningResult>;

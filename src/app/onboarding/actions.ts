@@ -19,6 +19,8 @@ import { DEFAULT_APP_ENTRY_URL } from '../auth/post-auth-redirect';
 import {
   CrossProviderLinkingNotAllowedError,
   TenantContextRequiredError,
+  TenantOrganizationLimitReachedError,
+  TenantOrganizationQuotaNotConfiguredError,
   TenantUserLimitReachedError,
 } from '@/modules/provisioning';
 import type { ProvisioningService } from '@/modules/provisioning';
@@ -91,7 +93,8 @@ export const completeOnboarding = async (formData: FormData) => {
 
     if (
       err instanceof TenantContextRequiredError ||
-      err instanceof TenantNotProvisionedError
+      err instanceof TenantNotProvisionedError ||
+      err instanceof TenantOrganizationQuotaNotConfiguredError
     ) {
       return {
         error:
@@ -103,6 +106,13 @@ export const completeOnboarding = async (formData: FormData) => {
       return {
         error:
           'This tenant reached the free-tier user limit. Upgrade the plan to add more users.',
+      };
+    }
+
+    if (err instanceof TenantOrganizationLimitReachedError) {
+      return {
+        error:
+          'This tenant reached its organization limit. Contact an administrator to increase the limit.',
       };
     }
 

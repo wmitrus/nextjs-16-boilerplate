@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
+import {
+  organizationIdFromProvisioningGeneratedUuid,
+  tenantIdFromProvisioningGeneratedUuid,
+} from '@/core/contracts/canonical-ids.provenance';
 import type { ExternalAuthProvider } from '@/core/contracts/identity';
 import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
@@ -32,6 +36,7 @@ import {
 } from '../../policy/templates';
 import { classifyProvisioningFailure } from '../provisioning-failure-diagnostics';
 
+import { DrizzleOrganizationCreationService } from './DrizzleOrganizationCreationService';
 import {
   authOrganizationIdentitiesTable,
   authUserIdentitiesTable,
@@ -399,7 +404,12 @@ export class DrizzleProvisioningService implements ProvisioningService {
           );
 
           const { internalOrganizationId, tenantCreatedNow, _parentTenantId } =
-            await resolveOrganization(db, input, internalUserId);
+            await resolveOrganization(
+              db,
+              input,
+              internalUserId,
+              this.freeTierMaxUsers,
+            );
 
           logger.debug(
             {
@@ -901,6 +911,7 @@ async function resolveOrganization(
   db: DrizzleDb,
   input: ProvisioningInput,
   internalUserId: string,
+  freeTierMaxUsers: number,
 ): Promise<{
   internalOrganizationId: string;
   tenantCreatedNow: boolean;
@@ -936,7 +947,11 @@ async function resolveOrganization(
   }
 
   if (tenancyMode === 'personal') {
-    return resolveOrCreatePersonalOrganization(db, internalUserId);
+    return resolveOrCreatePersonalOrganization(
+      db,
+      internalUserId,
+      freeTierMaxUsers,
+    );
   }
 
   if (tenancyMode === 'org') {
@@ -946,7 +961,12 @@ async function resolveOrganization(
           'TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider requires tenantExternalId in ProvisioningInput.',
         );
       }
-      return resolveOrCreateOrgOrganization(db, provider, input.orgExternalId);
+      return resolveOrCreateOrgOrganization(
+        db,
+        provider,
+        input.orgExternalId,
+        freeTierMaxUsers,
+      );
     }
 
     if (tenantContextSource === 'db') {
@@ -998,6 +1018,7 @@ async function resolveOrganization(
 async function resolveOrCreatePersonalOrganization(
   db: DrizzleDb,
   internalUserId: string,
+  freeTierMaxUsers: number,
 ): Promise<{
   internalOrganizationId: string;
   tenantCreatedNow: boolean;
@@ -1030,10 +1051,12 @@ async function resolveOrCreatePersonalOrganization(
     };
   }
 
-  const parentTenantId = deterministicTenantId(
-    `personal:tenant:${internalUserId}`,
+  const parentTenantId = tenantIdFromProvisioningGeneratedUuid(
+    deterministicTenantId(`personal:tenant:${internalUserId}`),
   );
-  const orgId = deterministicTenantId(`personal:org:${internalUserId}`);
+  const orgId = organizationIdFromProvisioningGeneratedUuid(
+    deterministicTenantId(`personal:org:${internalUserId}`),
+  );
 
   const tenantRows = await db
     .insert(tenantsTable)
@@ -1041,10 +1064,16 @@ async function resolveOrCreatePersonalOrganization(
     .onConflictDoNothing()
     .returning();
 
-  await db
-    .insert(organizationsTable)
-    .values({ id: orgId, tenantId: parentTenantId, name: 'Personal Workspace' })
-    .onConflictDoNothing();
+  await upsertTenantAttributesDefaults(db, parentTenantId, freeTierMaxUsers);
+
+  const organizationCreationService = new DrizzleOrganizationCreationService(
+    db,
+  );
+  await organizationCreationService.create({
+    organizationId: orgId,
+    tenantId: parentTenantId,
+    name: 'Personal Workspace',
+  });
 
   await db
     .insert(authOrganizationIdentitiesTable)
@@ -1104,6 +1133,7 @@ async function resolveOrCreateOrgOrganization(
   db: DrizzleDb,
   provider: ExternalAuthProvider,
   externalOrgId: string,
+  freeTierMaxUsers: number,
 ): Promise<{
   internalOrganizationId: string;
   tenantCreatedNow: boolean;
@@ -1136,10 +1166,12 @@ async function resolveOrCreateOrgOrganization(
     };
   }
 
-  const parentTenantId = deterministicTenantId(
-    `${provider}:tenant:${externalOrgId}`,
+  const parentTenantId = tenantIdFromProvisioningGeneratedUuid(
+    deterministicTenantId(`${provider}:tenant:${externalOrgId}`),
   );
-  const orgId = deterministicTenantId(`${provider}:org:${externalOrgId}`);
+  const orgId = organizationIdFromProvisioningGeneratedUuid(
+    deterministicTenantId(`${provider}:org:${externalOrgId}`),
+  );
 
   const tenantRows = await db
     .insert(tenantsTable)
@@ -1147,14 +1179,16 @@ async function resolveOrCreateOrgOrganization(
     .onConflictDoNothing()
     .returning();
 
-  await db
-    .insert(organizationsTable)
-    .values({
-      id: orgId,
-      tenantId: parentTenantId,
-      name: `Org ${externalOrgId.slice(0, 16)}`,
-    })
-    .onConflictDoNothing();
+  await upsertTenantAttributesDefaults(db, parentTenantId, freeTierMaxUsers);
+
+  const organizationCreationService = new DrizzleOrganizationCreationService(
+    db,
+  );
+  await organizationCreationService.create({
+    organizationId: orgId,
+    tenantId: parentTenantId,
+    name: `Org ${externalOrgId.slice(0, 16)}`,
+  });
 
   await db
     .insert(authOrganizationIdentitiesTable)

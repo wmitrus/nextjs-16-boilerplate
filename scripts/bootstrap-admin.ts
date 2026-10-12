@@ -46,6 +46,10 @@ import { randomUUID } from 'node:crypto';
 
 import { and, count, eq } from 'drizzle-orm';
 
+import {
+  organizationIdFromProvisioningGeneratedUuid,
+  tenantIdFromTenantsRow,
+} from '@/core/contracts/canonical-ids.provenance';
 import { createDb } from '@/core/db/create-db';
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
@@ -57,12 +61,12 @@ import {
 } from '@/modules/auth/infrastructure/drizzle/schema';
 import {
   membershipsTable,
-  organizationsTable,
   policiesTable,
   rolesTable,
   tenantAttributesTable,
   tenantsTable,
 } from '@/modules/authorization/infrastructure/drizzle/schema';
+import { DrizzleOrganizationCreationService } from '@/modules/provisioning';
 import {
   memberPolicies,
   ownerPolicies,
@@ -240,7 +244,7 @@ export async function run(): Promise<void> {
 
     const hashedPassword = await hashPassword(normalizedPassword);
     const userId = randomUUID();
-    const orgId = randomUUID();
+    const orgId = organizationIdFromProvisioningGeneratedUuid(randomUUID());
     const ownerRoleId = randomUUID();
     const memberRoleId = randomUUID();
 
@@ -250,10 +254,19 @@ export async function run(): Promise<void> {
         .values({ id: tenantId, name: orgName })
         .onConflictDoNothing();
 
-      await tx
-        .insert(organizationsTable)
-        .values({ id: orgId, tenantId, name: orgName })
-        .onConflictDoNothing();
+      const [canonicalTenantRow] = await tx
+        .select({ id: tenantsTable.id })
+        .from(tenantsTable)
+        .where(eq(tenantsTable.id, tenantId))
+        .limit(1);
+
+      if (!canonicalTenantRow) {
+        throw new Error(
+          '[bootstrap-admin] Tenant row is missing after bootstrap insert.',
+        );
+      }
+
+      const canonicalTenantId = tenantIdFromTenantsRow(canonicalTenantRow.id);
 
       await tx
         .insert(tenantAttributesTable)
@@ -267,6 +280,14 @@ export async function run(): Promise<void> {
           policyTemplateVersion: 0,
         })
         .onConflictDoNothing();
+
+      const organizationCreationService =
+        new DrizzleOrganizationCreationService(tx);
+      await organizationCreationService.create({
+        organizationId: orgId,
+        tenantId: canonicalTenantId,
+        name: orgName,
+      });
 
       await tx
         .insert(usersTable)

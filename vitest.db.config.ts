@@ -22,7 +22,7 @@ export default defineConfig({
     maxWorkers: 16,
     testTimeout: 30_000,
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage/db',

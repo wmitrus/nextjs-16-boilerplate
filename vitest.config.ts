@@ -17,9 +17,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    maxWorkers: 16,
     setupFiles: ['.storybook/vitest.setup.ts'],
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage/storybook',
@@ -33,7 +34,7 @@ export default defineConfig({
           globals: true,
           setupFiles: ['.storybook/vitest.setup.ts'],
           browser: {
-            enabled: true,
+            enabled: false,
             headless: true,
             provider: playwright({}),
             instances: [

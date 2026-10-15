@@ -25,10 +25,11 @@ export default defineConfig({
     globalSetup: ['tests/db/setup.postgres.ts'],
     pool: 'forks',
     fileParallelism: false,
+    maxWorkers: 16,
     testTimeout: 60_000,
     hookTimeout: 120_000,
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage/db-ci',

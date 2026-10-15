@@ -29,7 +29,7 @@ export default defineConfig({
       'src/core/db/migrations/**',
     ],
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage/unit',

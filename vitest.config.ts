@@ -34,7 +34,7 @@ export default defineConfig({
           globals: true,
           setupFiles: ['.storybook/vitest.setup.ts'],
           browser: {
-            enabled: false,
+            enabled: true,
             headless: true,
             provider: playwright({}),
             instances: [

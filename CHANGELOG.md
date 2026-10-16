@@ -1,3 +1,16 @@
+# [2.22.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.21.1...v2.22.0) (2026-10-16)
+
+
+### Bug Fixes
+
+* **provisioning:** use injected postgres url in race tests ([787d8c0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/787d8c07dbd12c007129bff904e789e8048b1121))
+* **test:** preserve coverage and browser validation ([089e6bc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/089e6bc2b9d87d57374a867cac872f58df58d978))
+
+
+### Features
+
+* **provisioning:** enforce organization quota safely ([9b7f1ba](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9b7f1bae6bead34f2c91257b843bfefbd56c5815))
+
 ## [2.21.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.21.0...v2.21.1) (2026-10-09)
 
 

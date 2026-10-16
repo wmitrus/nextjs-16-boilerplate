@@ -1,3 +1,17 @@
+# [2.23.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.22.0...v2.23.0) (2026-10-16)
+
+
+### Bug Fixes
+
+* **tenancy:** harden pre-S7 production bootstrap ([8a9d504](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8a9d5046f24aa49b11ae0be4047a1a79bab3a89a))
+* **tenancy:** harden S7 production migration gates ([985bb6c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/985bb6c20b129ed564d003e56a92afd11993d760))
+* **tenancy:** preserve pre-S7 migration bootstrap ([db95a35](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db95a3554d1d8dead3428e3bd4666a4ff03d94f7))
+
+
+### Features
+
+* **tenancy:** resolve S7 residual schema ownership ([9ef4d45](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9ef4d45ba0295e0c1afdcce9ebafea6df22b25a1))
+
 # [2.22.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.21.1...v2.22.0) (2026-10-16)
 
 

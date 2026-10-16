@@ -176,6 +176,13 @@
       "when": 1791136150316,
       "tag": "0024_cultured_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792163572667,
+      "tag": "0025_sharp_selene",
+      "breakpoints": true
     }
   ]
 }

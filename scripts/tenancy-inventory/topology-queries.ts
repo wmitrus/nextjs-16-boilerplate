@@ -248,9 +248,10 @@ export async function tenantIdShapeCounts(
 }
 
 /**
- * Confirms/refutes the ownership-matrix hypothesis that waitlist_entries.tenant_id
- * is a dead column -- application code never writes it, but the schema
- * carries it as a real, nullable uuid FK.
+ * S7 residue evidence for the legacy waitlist_entries.tenant_id column.
+ * Before cutover it counts populated values; after the physical column drop
+ * the registry query remains executable and returns zero via row-to-JSON
+ * lookup rather than referencing the removed column directly.
  */
 export async function waitlistEntriesWithTenantIdCount(
   tx: Tx,

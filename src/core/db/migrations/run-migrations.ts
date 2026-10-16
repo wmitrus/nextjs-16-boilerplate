@@ -11,6 +11,11 @@ import {
   sqlRunnerFromDrizzle,
   sqlRunnerFromPostgres,
 } from '@/core/db/post-migrate-steps';
+import { runS7PostMigrateSteps } from '@/core/db/s7-post-migrate-steps';
+import {
+  assertS7ProductionPreconditions,
+  gatherS7ProductionEvidence,
+} from '@/core/db/s7-production-gate';
 import type { DbDriver, DrizzleDb } from '@/core/db/types';
 import { resolveServerLogger } from '@/core/logger/di';
 
@@ -102,6 +107,24 @@ export async function runMigrations(
         options.postgresUrl,
         'runMigrations convergence',
       );
+
+      // S7·resid destructive Production DDL is intentionally executable only
+      // through the dedicated db:s7:cutover operator workflow. runMigrations
+      // is also reachable from migrate-cli.ts in NODE_ENV=production, so it
+      // must fail closed before the generic migrator can apply 0025.
+      //
+      // Preview retains the reviewed automatic cutover behavior. An already
+      // converged Production schema also passes without approval.
+      if (process.env.NODE_ENV === 'production') {
+        const evidence = await gatherS7ProductionEvidence(
+          sqlRunnerFromDrizzle(db, (text) => sql.raw(text)),
+        );
+
+        assertS7ProductionPreconditions(evidence, {
+          approved: false,
+          preview: process.env.VERCEL_ENV === 'preview',
+        });
+      }
     }
 
     if (driver === 'pglite') {
@@ -132,11 +155,12 @@ export async function runMigrations(
       );
 
     if (driver === 'pglite') {
-      await runAudAPostMigrateSteps(
-        sqlRunnerFromDrizzle(db, (text) => sql.raw(text)),
-        'plain',
-        { enforcement: 'enforce', log: postStepLog },
-      );
+      const runner = sqlRunnerFromDrizzle(db, (text) => sql.raw(text));
+      await runAudAPostMigrateSteps(runner, 'plain', {
+        enforcement: 'enforce',
+        log: postStepLog,
+      });
+      await runS7PostMigrateSteps(runner);
     } else {
       // Checked for a known pooler marker (defense-in-depth only -- does NOT
       // prove directness) and confirmed present at the top of `runMigrations`.
@@ -149,11 +173,12 @@ export async function runMigrations(
         connect_timeout: 10,
       });
       try {
-        await runAudAPostMigrateSteps(
-          sqlRunnerFromPostgres(affine),
-          'concurrent',
-          { enforcement: 'enforce', log: postStepLog },
-        );
+        const runner = sqlRunnerFromPostgres(affine);
+        await runAudAPostMigrateSteps(runner, 'concurrent', {
+          enforcement: 'enforce',
+          log: postStepLog,
+        });
+        await runS7PostMigrateSteps(runner);
       } finally {
         await affine.end({ timeout: 5 });
       }

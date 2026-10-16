@@ -11,6 +11,7 @@ import {
   expect,
   it,
   inject,
+  vi,
 } from 'vitest';
 
 import { AudAConvergenceError } from '@/core/db/post-migrate-steps';
@@ -82,6 +83,18 @@ async function reconstructPre0023(): Promise<void> {
     sql`ALTER TABLE audit_log_settings
           DROP COLUMN IF EXISTS ownership_state CASCADE,
           DROP COLUMN IF EXISTS organization_id CASCADE`,
+  );
+  await testDb.db.execute(
+    sql`ALTER TABLE public.policies
+        DROP CONSTRAINT IF EXISTS "policies_organization_id_not_null"`,
+  );
+  await testDb.db.execute(
+    sql`ALTER TABLE public.policies
+        ALTER COLUMN organization_id DROP NOT NULL`,
+  );
+  await testDb.db.execute(
+    sql`ALTER TABLE public.waitlist_entries
+        ADD COLUMN IF NOT EXISTS tenant_id uuid`,
   );
   await testDb.db.execute(
     sql`DELETE FROM drizzle.__drizzle_migrations WHERE created_at >= ${EXPAND_WHEN}`,
@@ -202,6 +215,49 @@ describe('runMigrations — AUD·A orchestration (real DB)', () => {
     ).rejects.toThrow(/known transaction-pooler/i);
 
     expect(diag.migrationActiveCount).toBe(before);
+  });
+
+  it('NODE_ENV=production blocks pending S7 in the generic runner before migration', async () => {
+    await testDb.db.execute(
+      sql`ALTER TABLE public.policies ALTER COLUMN organization_id DROP NOT NULL`,
+    );
+    await testDb.db.execute(
+      sql`ALTER TABLE public.waitlist_entries ADD COLUMN tenant_id uuid`,
+    );
+
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VERCEL_ENV', 'production');
+
+    try {
+      await expect(
+        runMigrations(testDb.db, 'postgres', {
+          postgresUrl: 'postgresql://operator:secret@localhost:5432/app',
+        }),
+      ).rejects.toThrow(/--s7-destructive-approved/i);
+
+      const waitlistColumn = await testDb.db.execute(sql`
+        SELECT count(*)::int AS value
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'waitlist_entries'
+          AND column_name = 'tenant_id'
+      `);
+      const rows = (
+        Array.isArray(waitlistColumn)
+          ? waitlistColumn
+          : (waitlistColumn as { rows: unknown[] }).rows
+      ) as Array<{ value: number }>;
+
+      expect(rows[0]?.value).toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+      await testDb.db.execute(
+        sql`ALTER TABLE public.waitlist_entries DROP COLUMN tenant_id`,
+      );
+      await testDb.db.execute(
+        sql`ALTER TABLE public.policies ALTER COLUMN organization_id SET NOT NULL`,
+      );
+    }
   });
 
   it('refuses to run in the Edge runtime', async () => {

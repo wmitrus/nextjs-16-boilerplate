@@ -104,6 +104,18 @@ describe('feature_flags — OZI-71 FF·A migration 0021 transition (real DB)', (
             DROP COLUMN IF EXISTS organization_id CASCADE`,
     );
     await testDb.db.execute(
+      sql`ALTER TABLE public.policies
+          DROP CONSTRAINT IF EXISTS "policies_organization_id_not_null"`,
+    );
+    await testDb.db.execute(
+      sql`ALTER TABLE public.policies
+          ALTER COLUMN organization_id DROP NOT NULL`,
+    );
+    await testDb.db.execute(
+      sql`ALTER TABLE public.waitlist_entries
+          ADD COLUMN IF NOT EXISTS tenant_id uuid`,
+    );
+    await testDb.db.execute(
       sql`DELETE FROM drizzle.__drizzle_migrations WHERE created_at >= ${FFA_MIGRATION_WHEN}`,
     );
 

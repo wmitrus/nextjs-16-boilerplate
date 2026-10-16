@@ -29,15 +29,7 @@ export class DrizzlePolicyRepository implements PolicyRepository {
     const rows = await this.db
       .select()
       .from(policiesTable)
-      .where(
-        and(
-          or(
-            eq(policiesTable.organizationId, tenantId),
-            isNull(policiesTable.organizationId),
-          ),
-          roleScopeFilter,
-        ),
-      )
+      .where(and(eq(policiesTable.organizationId, tenantId), roleScopeFilter))
       .orderBy(asc(policiesTable.createdAt));
 
     return rows.map((row) => ({

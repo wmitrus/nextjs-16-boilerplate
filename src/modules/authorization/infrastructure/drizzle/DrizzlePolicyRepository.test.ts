@@ -45,7 +45,7 @@ describe('DrizzlePolicyRepository', () => {
     const rows = [
       {
         id: 'p1',
-        tenantId: 't1',
+        organizationId: 't1',
         roleId: null,
         effect: 'allow',
         resource: 'doc',
@@ -72,7 +72,7 @@ describe('DrizzlePolicyRepository', () => {
     const rows = [
       {
         id: 'p2',
-        tenantId: null,
+        organizationId: 't1',
         roleId: null,
         effect: 'allow',
         resource: 'doc',
@@ -87,26 +87,5 @@ describe('DrizzlePolicyRepository', () => {
     const result = await repo.getPolicies(baseContext);
 
     expect(typeof result[0].condition).toBe('function');
-  });
-
-  it('global policy (tenantId null) is included in results', async () => {
-    const rows = [
-      {
-        id: 'p3',
-        tenantId: null,
-        roleId: null,
-        effect: 'deny',
-        resource: '*',
-        actions: ['*:*'],
-        conditions: null,
-        createdAt: new Date(),
-      },
-    ];
-    const db = createMockDb(rows);
-    const repo = new DrizzlePolicyRepository(db);
-
-    const result = await repo.getPolicies(baseContext);
-
-    expect(result[0].effect).toBe('deny');
   });
 });

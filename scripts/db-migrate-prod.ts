@@ -12,6 +12,13 @@ import {
   type AudAPostMigrateResult,
   type SqlRunner,
 } from '@/core/db/post-migrate-steps';
+import { runS7PostMigrateSteps } from '@/core/db/s7-post-migrate-steps';
+import {
+  assertS7ProductionPreconditions,
+  gatherS7ProductionEvidence,
+  S7_PRODUCTION_APPROVAL_FLAG,
+  type S7ProductionEvidence,
+} from '@/core/db/s7-production-gate';
 
 import { reconcileKnownMigrationState } from './reconcile-known-migration-state';
 import {
@@ -123,6 +130,8 @@ function runDrizzleMigrate(): void {
  */
 export interface MigrateProdDeps {
   runConvergence: typeof runAudAPostMigrateSteps;
+  runS7Convergence: typeof runS7PostMigrateSteps;
+  gatherS7Evidence: typeof gatherS7ProductionEvidence;
   openConvergenceRunner: (url: string) => {
     runner: SqlRunner;
     close: () => Promise<unknown>;
@@ -132,6 +141,8 @@ export interface MigrateProdDeps {
 function defaultMigrateProdDeps(): MigrateProdDeps {
   return {
     runConvergence: runAudAPostMigrateSteps,
+    runS7Convergence: runS7PostMigrateSteps,
+    gatherS7Evidence: gatherS7ProductionEvidence,
     openConvergenceRunner: (url) => {
       const sql = postgres(url, {
         prepare: false,
@@ -159,6 +170,73 @@ function defaultMigrateProdDeps(): MigrateProdDeps {
  * `VERCEL_ENV=production`: ordinary Production stays the operator-gated
  * `db:aud-a:converge --check` then `--apply --production-approved`.
  */
+async function runS7Preflight(
+  connectionString: string,
+  deps: MigrateProdDeps,
+  options: {
+    approved: boolean;
+    checkOnly: boolean;
+  },
+): Promise<S7ProductionEvidence> {
+  const { runner, close } = deps.openConvergenceRunner(connectionString);
+
+  try {
+    const evidence = await deps.gatherS7Evidence(runner);
+
+    console.log(
+      JSON.stringify(
+        {
+          s7Preflight: {
+            ...evidence,
+            preview: process.env.VERCEL_ENV === 'preview',
+            approved: options.approved,
+            checkOnly: options.checkOnly,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    assertS7ProductionPreconditions(evidence, {
+      approved: options.approved,
+      preview: process.env.VERCEL_ENV === 'preview',
+      checkOnly: options.checkOnly,
+    });
+
+    return evidence;
+  } finally {
+    await close();
+  }
+}
+
+async function runApprovedS7Convergence(
+  connectionString: string,
+  deps: MigrateProdDeps,
+  options: {
+    approved: boolean;
+    preS7Bootstrap: boolean;
+  },
+): Promise<void> {
+  if (
+    process.env.VERCEL_ENV === 'preview' ||
+    (!options.approved && !options.preS7Bootstrap)
+  ) {
+    return;
+  }
+
+  const { runner, close } = deps.openConvergenceRunner(connectionString);
+
+  try {
+    const result = await deps.runS7Convergence(runner);
+    console.log(
+      JSON.stringify({ s7Converge: { applied: true, ...result } }, null, 2),
+    );
+  } finally {
+    await close();
+  }
+}
+
 async function runPreviewConvergence(
   connectionString: string,
   deps: MigrateProdDeps,
@@ -179,6 +257,12 @@ async function runPreviewConvergence(
     console.log(
       JSON.stringify({ audAConverge: { applied: true, ...result } }, null, 2),
     );
+
+    const s7Result = await deps.runS7Convergence(runner);
+    console.log(
+      JSON.stringify({ s7Converge: { applied: true, ...s7Result } }, null, 2),
+    );
+
     return result;
   } finally {
     await close();
@@ -190,6 +274,14 @@ export async function run(
   deps: MigrateProdDeps = defaultMigrateProdDeps(),
 ): Promise<void> {
   const dryRun = argv.includes('--check');
+  const s7Approved = argv.includes(S7_PRODUCTION_APPROVAL_FLAG);
+
+  if (dryRun && s7Approved) {
+    throw new Error(
+      `[db-migrate-prod] ${S7_PRODUCTION_APPROVAL_FLAG} cannot be combined with --check`,
+    );
+  }
+
   const migrationUrl = resolveMigrationUrlWithSource(
     process.env.DATABASE_URL_UNPOOLED,
   );
@@ -218,6 +310,11 @@ export async function run(
   // though `connectionString` already came exclusively from
   // DATABASE_URL_UNPOOLED (the actual trust boundary, enforced above).
   assertNoKnownPoolerMarker(connectionString, 'db-migrate-prod');
+
+  const s7Preflight = await runS7Preflight(connectionString, deps, {
+    approved: s7Approved,
+    checkOnly: dryRun,
+  });
 
   const summary = await reconcileKnownMigrationState({
     connectionString,
@@ -329,6 +426,10 @@ export async function run(
   assertMigrationJournalComplete(journalSummary);
 
   await runPreviewConvergence(connectionString, deps);
+  await runApprovedS7Convergence(connectionString, deps, {
+    approved: s7Approved,
+    preS7Bootstrap: s7Preflight.preS7Schema,
+  });
 }
 
 const isMain =

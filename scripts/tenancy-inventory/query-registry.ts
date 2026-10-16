@@ -299,8 +299,12 @@ const REGISTRY: readonly QueryStatement[] = [
     id: 'waitlist_entries_with_tenant_id_count',
     kind: 'data',
     description:
-      'Whether waitlist_entries.tenant_id (unused by app code) is ever set.',
-    sql: `select count(*) as value from public.waitlist_entries where tenant_id is not null`,
+      'S7 residue evidence: counts legacy waitlist_entries.tenant_id values before cutover and remains valid after the column is dropped.',
+    sql: `
+      select count(*) as value
+      from public.waitlist_entries
+      where to_jsonb(waitlist_entries) ->> 'tenant_id' is not null
+    `,
     tables: [{ schema: 'public', table: 'waitlist_entries' }],
   },
   {

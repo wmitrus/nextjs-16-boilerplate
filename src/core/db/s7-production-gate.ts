@@ -4,6 +4,7 @@ export const S7_PRODUCTION_APPROVAL_FLAG = '--s7-destructive-approved';
 export const S7_POLICIES_CHECK_NAME = 'policies_organization_id_not_null';
 
 export interface S7ProductionEvidence {
+  readonly preS7Schema: boolean;
   readonly waitlistTenantIdExists: boolean;
   readonly waitlistRowsWithTenantId: number;
   readonly policiesNullOrganizationId: number;
@@ -30,11 +31,29 @@ export async function gatherS7ProductionEvidence(
   runner: SqlRunner,
 ): Promise<S7ProductionEvidence> {
   const columnRows = await runner.query<{
+    policies_table_exists: boolean;
+    policies_tenant_id_exists: boolean;
+    policies_organization_id_exists: boolean;
     waitlist_tenant_id_exists: boolean;
-    policies_is_nullable: 'YES' | 'NO';
+    policies_is_nullable: 'YES' | 'NO' | null;
     policies_helper_check_exists: boolean;
   }>(
     `SELECT
+       to_regclass('public.policies') IS NOT NULL AS policies_table_exists,
+       EXISTS (
+         SELECT 1
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'policies'
+            AND column_name = 'tenant_id'
+       ) AS policies_tenant_id_exists,
+       EXISTS (
+         SELECT 1
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'policies'
+            AND column_name = 'organization_id'
+       ) AS policies_organization_id_exists,
        EXISTS (
          SELECT 1
            FROM information_schema.columns
@@ -62,9 +81,36 @@ export async function gatherS7ProductionEvidence(
   );
 
   const state = columnRows[0];
-  if (!state || !state.policies_is_nullable) {
+  if (!state) {
+    throw new Error('[s7-production-gate] schema inspection returned no row');
+  }
+
+  if (!state.policies_organization_id_exists) {
+    const legitimatePreS7 =
+      !state.waitlist_tenant_id_exists &&
+      !state.policies_helper_check_exists &&
+      (!state.policies_table_exists || state.policies_tenant_id_exists);
+
+    if (!legitimatePreS7) {
+      throw new Error(
+        '[s7-production-gate] policies.organization_id is missing outside a ' +
+          'recognized pre-S7 schema; refusing unknown schema drift',
+      );
+    }
+
+    return {
+      preS7Schema: true,
+      waitlistTenantIdExists: false,
+      waitlistRowsWithTenantId: 0,
+      policiesNullOrganizationId: 0,
+      policiesOrganizationIdNullable: false,
+      policiesHelperCheckExists: false,
+    };
+  }
+
+  if (!state.policies_is_nullable) {
     throw new Error(
-      '[s7-production-gate] required policies.organization_id column is missing',
+      '[s7-production-gate] policies.organization_id nullability is unavailable',
     );
   }
 
@@ -88,6 +134,7 @@ export async function gatherS7ProductionEvidence(
   );
 
   return {
+    preS7Schema: false,
     waitlistTenantIdExists: state.waitlist_tenant_id_exists === true,
     waitlistRowsWithTenantId,
     policiesNullOrganizationId: toCount(
@@ -107,6 +154,22 @@ export function assertS7ProductionPreconditions(
     readonly checkOnly?: boolean;
   },
 ): void {
+  if (evidence.preS7Schema) {
+    if (
+      evidence.waitlistTenantIdExists ||
+      evidence.waitlistRowsWithTenantId !== 0 ||
+      evidence.policiesNullOrganizationId !== 0 ||
+      evidence.policiesOrganizationIdNullable ||
+      evidence.policiesHelperCheckExists
+    ) {
+      throw new Error(
+        '[s7-production-gate] inconsistent pre-S7 evidence; refusing schema drift',
+      );
+    }
+
+    return;
+  }
+
   if (evidence.waitlistRowsWithTenantId !== 0) {
     throw new Error(
       `[s7-production-gate] refusing destructive cutover: ` +

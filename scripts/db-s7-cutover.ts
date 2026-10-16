@@ -107,6 +107,7 @@ function printEvidence(
         s7Cutover: {
           mode,
           evidence,
+          schemaState: evidence.preS7Schema ? 'pre-S7' : 'S7-era',
           destructiveChange: evidence.waitlistTenantIdExists
             ? 'DROP waitlist_entries.tenant_id is pending'
             : 'waitlist_entries.tenant_id is already absent',

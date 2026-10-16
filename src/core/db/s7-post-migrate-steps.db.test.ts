@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { sqlRunnerFromDrizzle } from '@/core/db/post-migrate-steps';
 import { runS7PostMigrateSteps } from '@/core/db/s7-post-migrate-steps';
+import { gatherS7ProductionEvidence } from '@/core/db/s7-production-gate';
 
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
@@ -232,5 +233,40 @@ describe('runS7PostMigrateSteps (DB)', () => {
     ).rejects.toThrow();
 
     expect(await policiesNullable()).toBe('NO');
+  });
+
+  it('recognizes a pre-0008 policies shape on a real database', async () => {
+    await testDb.db
+      .transaction(async (tx) => {
+        await tx.execute(sql`
+        ALTER TABLE public.policies
+        RENAME COLUMN organization_id TO tenant_id
+      `);
+
+        const runner = sqlRunnerFromDrizzle(tx, (text) => sql.raw(text));
+        const evidence = await gatherS7ProductionEvidence(runner);
+
+        expect(evidence).toEqual({
+          preS7Schema: true,
+          waitlistTenantIdExists: false,
+          waitlistRowsWithTenantId: 0,
+          policiesNullOrganizationId: 0,
+          policiesOrganizationIdNullable: false,
+          policiesHelperCheckExists: false,
+        });
+
+        throw new Error('ROLLBACK_PRE_S7_TEST');
+      })
+      .catch((error: unknown) => {
+        if (
+          !(error instanceof Error) ||
+          error.message !== 'ROLLBACK_PRE_S7_TEST'
+        ) {
+          throw error;
+        }
+      });
+
+    expect(await policiesNullable()).toBe('NO');
+    expect(await waitlistTenantIdExists()).toBe(false);
   });
 });

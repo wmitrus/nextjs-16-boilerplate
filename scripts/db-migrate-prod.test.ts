@@ -182,6 +182,7 @@ function makeConvergeDeps() {
     waitlistTenantIdAbsent: true as const,
   }));
   const gatherS7Evidence = vi.fn(async () => ({
+    preS7Schema: false,
     waitlistTenantIdExists: false,
     waitlistRowsWithTenantId: 0,
     policiesNullOrganizationId: 0,
@@ -246,12 +247,33 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
     expect(journalOrder).toBeLessThan(convergeOrder);
   });
 
+  it('Production allows a recognized pre-S7 database to run migrations without S7 approval', async () => {
+    process.env.DATABASE_URL_UNPOOLED = DIRECT;
+    process.env.VERCEL_ENV = 'production';
+    const h = makeConvergeDeps();
+
+    h.gatherS7Evidence.mockResolvedValue({
+      preS7Schema: true,
+      waitlistTenantIdExists: false,
+      waitlistRowsWithTenantId: 0,
+      policiesNullOrganizationId: 0,
+      policiesOrganizationIdNullable: false,
+      policiesHelperCheckExists: false,
+    });
+
+    await run([], h.deps);
+
+    expect(mockSpawnSync).toHaveBeenCalledTimes(1);
+    expect(h.runS7Convergence).not.toHaveBeenCalled();
+  });
+
   it('Production with pending S7 and no approval fails before drizzle migration starts', async () => {
     process.env.DATABASE_URL_UNPOOLED = DIRECT;
     process.env.VERCEL_ENV = 'production';
     const h = makeConvergeDeps();
 
     h.gatherS7Evidence.mockResolvedValue({
+      preS7Schema: false,
       waitlistTenantIdExists: true,
       waitlistRowsWithTenantId: 0,
       policiesNullOrganizationId: 0,
@@ -272,6 +294,7 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
     const h = makeConvergeDeps();
 
     h.gatherS7Evidence.mockResolvedValue({
+      preS7Schema: false,
       waitlistTenantIdExists: true,
       waitlistRowsWithTenantId: 0,
       policiesNullOrganizationId: 0,

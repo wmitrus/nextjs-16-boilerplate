@@ -10,6 +10,7 @@ function makeDeps(overrides: Partial<S7CutoverDeps> = {}): {
   applyMigration: ReturnType<typeof vi.fn>;
 } {
   const gatherEvidence = vi.fn(async () => ({
+    preS7Schema: false,
     waitlistTenantIdExists: true,
     waitlistRowsWithTenantId: 0,
     policiesNullOrganizationId: 0,
@@ -106,6 +107,7 @@ describe('db:s7:cutover orchestration', () => {
 
     const h = makeDeps({
       gatherEvidence: vi.fn(async () => ({
+        preS7Schema: false,
         waitlistTenantIdExists: true,
         waitlistRowsWithTenantId: 1,
         policiesNullOrganizationId: 0,
@@ -127,6 +129,7 @@ describe('db:s7:cutover orchestration', () => {
 
     const h = makeDeps({
       gatherEvidence: vi.fn(async () => ({
+        preS7Schema: false,
         waitlistTenantIdExists: true,
         waitlistRowsWithTenantId: 0,
         policiesNullOrganizationId: 1,

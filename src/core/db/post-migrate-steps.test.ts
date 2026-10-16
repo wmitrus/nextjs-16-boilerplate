@@ -416,11 +416,16 @@ describe('AUD·A 0023-only timeout scoping (fix 1)', () => {
     expect(firstDdl).toBeLessThan(resetAt);
   });
 
-  it('NO OTHER generated migration sets lock_timeout / statement_timeout (0023-only)', () => {
-    const offenders = readdirSync(MIGRATIONS_DIR)
-      .filter((f) => f.endsWith('.sql') && f !== '0023_breezy_sandman.sql')
-      .filter((f) => /\b(lock_timeout|statement_timeout)\b/i.test(read(f)));
-    expect(offenders).toEqual([]);
+  it('only reviewed migrations 0023 and 0025 set migration-local timeouts', () => {
+    const migrationsWithTimeouts = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith('.sql'))
+      .filter((f) => /\b(lock_timeout|statement_timeout)\b/i.test(read(f)))
+      .sort();
+
+    expect(migrationsWithTimeouts).toEqual([
+      '0023_breezy_sandman.sql',
+      '0025_sharp_selene.sql',
+    ]);
   });
 });
 

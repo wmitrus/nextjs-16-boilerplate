@@ -1,9 +1,9 @@
+SET LOCAL lock_timeout = '3s';
+--> statement-breakpoint
+
 ALTER TABLE "policies"
 ADD CONSTRAINT "policies_organization_id_not_null"
 CHECK ("organization_id" IS NOT NULL) NOT VALID;
---> statement-breakpoint
-
-SET LOCAL lock_timeout = '3s';
 --> statement-breakpoint
 
 LOCK TABLE "waitlist_entries" IN ACCESS EXCLUSIVE MODE;

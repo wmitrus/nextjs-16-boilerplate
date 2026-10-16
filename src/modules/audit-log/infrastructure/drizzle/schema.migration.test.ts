@@ -219,6 +219,14 @@ describe('0025 S7·resid migration SQL contract', () => {
     );
   });
 
+  it('sets lock_timeout before the first lock-taking ALTER TABLE', () => {
+    const timeout = S7_RESID_SQL.indexOf(`SET LOCAL lock_timeout = '3s'`);
+    const policiesAlter = S7_RESID_SQL.indexOf('ALTER TABLE "policies"');
+
+    expect(timeout).toBeGreaterThanOrEqual(0);
+    expect(policiesAlter).toBeGreaterThan(timeout);
+  });
+
   it('drops only the dead waitlist tenant_id compatibility column', () => {
     expect(S7_RESID_SQL).toContain(
       'ALTER TABLE "waitlist_entries"\nDROP COLUMN "tenant_id";',

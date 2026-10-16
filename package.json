@@ -156,7 +156,9 @@
     "test:coverage": "vitest run --config vitest.unit.config.ts --coverage",
     "test:integration:coverage": "vitest run --config vitest.integration.config.ts --coverage",
     "test:all:coverage": "vitest run --config vitest.config.ts --coverage",
-    "test:storybook:coverage": "vitest run --project storybook --coverage"
+    "test:storybook:coverage": "vitest run --project storybook --coverage",
+    "db:ownership-disposition": "tsx scripts/db-ownership-disposition-gate.ts",
+    "db:ownership-disposition:local": "node --env-file=.env.production --import tsx scripts/db-ownership-disposition-gate.ts"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [

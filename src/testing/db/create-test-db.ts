@@ -103,7 +103,13 @@ async function createPgliteTestDb(): Promise<TestDb> {
 }
 
 async function createPostgresTestDb(url: string): Promise<TestDb> {
-  const client = postgres(url, { max: 1 });
+  const client = postgres(url, {
+    max: 1,
+    // Test isolation uses TRUNCATE ... CASCADE on the disposable test DB.
+    // PostgreSQL emits verbose NOTICE messages for every dependent relation;
+    // suppress those notices only in the test client while preserving errors.
+    onnotice: () => {},
+  });
   const db = drizzlePostgres(client) as unknown as DrizzleDb;
 
   await truncateAll(db);

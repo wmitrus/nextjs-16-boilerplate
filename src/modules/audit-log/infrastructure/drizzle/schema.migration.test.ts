@@ -40,6 +40,7 @@ const read = (file: string) =>
 
 const EXPAND_SQL = read('0023_breezy_sandman.sql');
 const AUD_D_SQL = read('0024_cultured_tarot.sql');
+const S7_RESID_SQL = read('0025_sharp_selene.sql');
 const JOURNAL = JSON.parse(read('meta/_journal.json')) as {
   entries: Array<{ idx: number; tag: string }>;
 };
@@ -211,11 +212,78 @@ describe('0024 AUD·D global semantic unique SQL contract', () => {
   });
 });
 
-describe('AUD migration journal contract', () => {
-  it('contains AUD·A expand followed by the AUD·D global semantic unique', () => {
-    const tail = JOURNAL.entries.slice(-2).map((e) => `${e.idx}:${e.tag}`);
+describe('0025 S7·resid migration SQL contract', () => {
+  it('adds the policies organization_id helper CHECK as NOT VALID', () => {
+    expect(S7_RESID_SQL).toContain(
+      'ALTER TABLE "policies"\nADD CONSTRAINT "policies_organization_id_not_null"\nCHECK ("organization_id" IS NOT NULL) NOT VALID;',
+    );
+  });
 
-    expect(tail).toEqual(['23:0023_breezy_sandman', '24:0024_cultured_tarot']);
+  it('drops only the dead waitlist tenant_id compatibility column', () => {
+    expect(S7_RESID_SQL).toContain(
+      'ALTER TABLE "waitlist_entries"\nDROP COLUMN "tenant_id";',
+    );
+    expect(S7_RESID_SQL).not.toMatch(/DROP COLUMN "organization_id"/i);
+  });
+
+  it('does not validate the helper CHECK inside the journaled migration', () => {
+    expect(S7_RESID_SQL).not.toMatch(/VALIDATE CONSTRAINT/i);
+  });
+
+  it('does not SET NOT NULL inside the journaled migration', () => {
+    expect(S7_RESID_SQL).not.toMatch(
+      /ALTER COLUMN "organization_id" SET NOT NULL/i,
+    );
+  });
+
+  it('does not use CASCADE for the destructive waitlist column drop', () => {
+    expect(S7_RESID_SQL).not.toMatch(/DROP COLUMN[^;]*CASCADE/i);
+  });
+
+  it('rechecks waitlist tenant_id under ACCESS EXCLUSIVE immediately before DROP', () => {
+    expect(S7_RESID_SQL).toContain(
+      `LOCK TABLE "waitlist_entries" IN ACCESS EXCLUSIVE MODE;`,
+    );
+    expect(S7_RESID_SQL).toMatch(
+      /IF EXISTS \([\s\S]*FROM "waitlist_entries"[\s\S]*WHERE "tenant_id" IS NOT NULL[\s\S]*\) THEN/i,
+    );
+
+    const guard = S7_RESID_SQL.indexOf('LOCK TABLE "waitlist_entries"');
+    const drop = S7_RESID_SQL.indexOf(
+      'ALTER TABLE "waitlist_entries"\nDROP COLUMN "tenant_id"',
+    );
+
+    expect(guard).toBeGreaterThanOrEqual(0);
+    expect(drop).toBeGreaterThan(guard);
+  });
+
+  it('bounds acquisition of the destructive table lock', () => {
+    expect(S7_RESID_SQL).toContain(`SET LOCAL lock_timeout = '3s';`);
+    expect(S7_RESID_SQL).toContain('SET LOCAL lock_timeout = DEFAULT;');
+  });
+
+  it('touches only policies and waitlist_entries', () => {
+    const tableRefs = [
+      ...S7_RESID_SQL.matchAll(/ALTER TABLE "([a-z_]+)"/g),
+    ].map((m) => m[1]);
+
+    expect(new Set(tableRefs)).toEqual(
+      new Set(['policies', 'waitlist_entries']),
+    );
+  });
+});
+
+describe('AUD migration journal contract', () => {
+  it('contains the reviewed OZI-71 journal sequence through S7·resid', () => {
+    const oziEntries = JOURNAL.entries
+      .filter((e) => e.idx >= 23 && e.idx <= 25)
+      .map((e) => `${e.idx}:${e.tag}`);
+
+    expect(oziEntries).toEqual([
+      '23:0023_breezy_sandman',
+      '24:0024_cultured_tarot',
+      '25:0025_sharp_selene',
+    ]);
 
     const tags = JOURNAL.entries.map((e) => e.tag);
     expect(tags).not.toContain('0024_aud_a_validate_organization_fks');

@@ -177,8 +177,34 @@ function makeConvergeDeps() {
   const close = vi.fn(async () => {});
   const openConvergenceRunner = vi.fn((_url: string) => ({ runner, close }));
   const runConvergence = vi.fn(async () => ({ indexes: [], foreignKeys: [] }));
-  const deps: MigrateProdDeps = { runConvergence, openConvergenceRunner };
-  return { deps, runner, close, runConvergence, openConvergenceRunner };
+  const runS7Convergence = vi.fn(async () => ({
+    policiesOrganizationId: 'already-not-null' as const,
+    waitlistTenantIdAbsent: true as const,
+  }));
+  const gatherS7Evidence = vi.fn(async () => ({
+    waitlistTenantIdExists: false,
+    waitlistRowsWithTenantId: 0,
+    policiesNullOrganizationId: 0,
+    policiesOrganizationIdNullable: false,
+    policiesHelperCheckExists: false,
+  }));
+
+  const deps: MigrateProdDeps = {
+    runConvergence,
+    runS7Convergence,
+    gatherS7Evidence,
+    openConvergenceRunner,
+  };
+
+  return {
+    deps,
+    runner,
+    close,
+    runConvergence,
+    runS7Convergence,
+    gatherS7Evidence,
+    openConvergenceRunner,
+  };
 }
 
 describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)', () => {
@@ -202,13 +228,15 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
 
     await run([], h.deps);
 
-    expect(h.openConvergenceRunner).toHaveBeenCalledTimes(1);
+    expect(h.openConvergenceRunner).toHaveBeenCalledTimes(2);
     expect(h.openConvergenceRunner).toHaveBeenCalledWith(DIRECT);
+    expect(h.gatherS7Evidence).toHaveBeenCalledTimes(1);
     expect(h.runConvergence).toHaveBeenCalledTimes(1);
     expect(h.runConvergence).toHaveBeenCalledWith(h.runner, 'concurrent', {
       enforcement: 'enforce',
     });
-    expect(h.close).toHaveBeenCalledTimes(1);
+    expect(h.runS7Convergence).toHaveBeenCalledTimes(1);
+    expect(h.close).toHaveBeenCalledTimes(2);
 
     // "after migration + journal success": the journal gate ran, and ran
     // strictly BEFORE the convergence call.
@@ -218,6 +246,50 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
     expect(journalOrder).toBeLessThan(convergeOrder);
   });
 
+  it('Production with pending S7 and no approval fails before drizzle migration starts', async () => {
+    process.env.DATABASE_URL_UNPOOLED = DIRECT;
+    process.env.VERCEL_ENV = 'production';
+    const h = makeConvergeDeps();
+
+    h.gatherS7Evidence.mockResolvedValue({
+      waitlistTenantIdExists: true,
+      waitlistRowsWithTenantId: 0,
+      policiesNullOrganizationId: 0,
+      policiesOrganizationIdNullable: true,
+      policiesHelperCheckExists: false,
+    });
+
+    await expect(run([], h.deps)).rejects.toThrow(/--s7-destructive-approved/i);
+
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(h.runConvergence).not.toHaveBeenCalled();
+    expect(h.runS7Convergence).not.toHaveBeenCalled();
+  });
+
+  it('approved Production runs the journaled migration before S7 convergence', async () => {
+    process.env.DATABASE_URL_UNPOOLED = DIRECT;
+    process.env.VERCEL_ENV = 'production';
+    const h = makeConvergeDeps();
+
+    h.gatherS7Evidence.mockResolvedValue({
+      waitlistTenantIdExists: true,
+      waitlistRowsWithTenantId: 0,
+      policiesNullOrganizationId: 0,
+      policiesOrganizationIdNullable: true,
+      policiesHelperCheckExists: false,
+    });
+
+    await run(['--s7-destructive-approved'], h.deps);
+
+    expect(mockSpawnSync).toHaveBeenCalledTimes(1);
+    expect(h.runConvergence).not.toHaveBeenCalled();
+    expect(h.runS7Convergence).toHaveBeenCalledTimes(1);
+
+    expect(mockSpawnSync.mock.invocationCallOrder[0]).toBeLessThan(
+      h.runS7Convergence.mock.invocationCallOrder[0],
+    );
+  });
+
   it('VERCEL_ENV=production never auto-runs convergence — stays the operator-gated db:aud-a:converge path', async () => {
     process.env.DATABASE_URL_UNPOOLED = DIRECT;
     process.env.VERCEL_ENV = 'production';
@@ -225,8 +297,10 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
 
     await run([], h.deps);
 
-    expect(h.openConvergenceRunner).not.toHaveBeenCalled();
+    expect(h.openConvergenceRunner).toHaveBeenCalledTimes(1);
+    expect(h.gatherS7Evidence).toHaveBeenCalledTimes(1);
     expect(h.runConvergence).not.toHaveBeenCalled();
+    expect(h.runS7Convergence).not.toHaveBeenCalled();
   });
 
   it('no VERCEL_ENV (ordinary local/CI/manual run) never auto-runs convergence', async () => {
@@ -236,8 +310,10 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
 
     await run([], h.deps);
 
-    expect(h.openConvergenceRunner).not.toHaveBeenCalled();
+    expect(h.openConvergenceRunner).toHaveBeenCalledTimes(1);
+    expect(h.gatherS7Evidence).toHaveBeenCalledTimes(1);
     expect(h.runConvergence).not.toHaveBeenCalled();
+    expect(h.runS7Convergence).not.toHaveBeenCalled();
   });
 
   it('--check never auto-runs convergence even when VERCEL_ENV=preview (dry-run mutates nothing)', async () => {
@@ -247,8 +323,10 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
 
     await run(['--check'], h.deps);
 
-    expect(h.openConvergenceRunner).not.toHaveBeenCalled();
+    expect(h.openConvergenceRunner).toHaveBeenCalledTimes(1);
+    expect(h.gatherS7Evidence).toHaveBeenCalledTimes(1);
     expect(h.runConvergence).not.toHaveBeenCalled();
+    expect(h.runS7Convergence).not.toHaveBeenCalled();
   });
 
   it('validateMigrationJournal target: the SAME DATABASE_URL_UNPOOLED, not a second resolution', async () => {

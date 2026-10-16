@@ -11,6 +11,7 @@ import {
   sqlRunnerFromDrizzle,
   sqlRunnerFromPostgres,
 } from '@/core/db/post-migrate-steps';
+import { runS7PostMigrateSteps } from '@/core/db/s7-post-migrate-steps';
 import type { DbDriver, DrizzleDb } from '@/core/db/types';
 import { resolveServerLogger } from '@/core/logger/di';
 
@@ -132,11 +133,12 @@ export async function runMigrations(
       );
 
     if (driver === 'pglite') {
-      await runAudAPostMigrateSteps(
-        sqlRunnerFromDrizzle(db, (text) => sql.raw(text)),
-        'plain',
-        { enforcement: 'enforce', log: postStepLog },
-      );
+      const runner = sqlRunnerFromDrizzle(db, (text) => sql.raw(text));
+      await runAudAPostMigrateSteps(runner, 'plain', {
+        enforcement: 'enforce',
+        log: postStepLog,
+      });
+      await runS7PostMigrateSteps(runner);
     } else {
       // Checked for a known pooler marker (defense-in-depth only -- does NOT
       // prove directness) and confirmed present at the top of `runMigrations`.
@@ -149,11 +151,12 @@ export async function runMigrations(
         connect_timeout: 10,
       });
       try {
-        await runAudAPostMigrateSteps(
-          sqlRunnerFromPostgres(affine),
-          'concurrent',
-          { enforcement: 'enforce', log: postStepLog },
-        );
+        const runner = sqlRunnerFromPostgres(affine);
+        await runAudAPostMigrateSteps(runner, 'concurrent', {
+          enforcement: 'enforce',
+          log: postStepLog,
+        });
+        await runS7PostMigrateSteps(runner);
       } finally {
         await affine.end({ timeout: 5 });
       }

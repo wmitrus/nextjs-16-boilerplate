@@ -103,10 +103,11 @@ export const policiesTable = pgTable(
   'policies',
   {
     id: uuid('id').primaryKey(),
-    organizationId: uuid('organization_id').references(
-      () => organizationsReferenceTable.id,
-      { onDelete: 'cascade' },
-    ),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizationsReferenceTable.id, {
+        onDelete: 'cascade',
+      }),
     roleId: uuid('role_id').references(() => rolesTable.id, {
       onDelete: 'cascade',
     }),
@@ -208,9 +209,6 @@ export const waitlistEntriesTable = pgTable(
       () => organizationsReferenceTable.id,
       { onDelete: 'set null' },
     ),
-    tenantId: uuid('tenant_id').references(() => tenantsReferenceTable.id, {
-      onDelete: 'set null',
-    }),
     status: text('status', { enum: ['pending', 'approved', 'rejected'] })
       .notNull()
       .default('pending'),

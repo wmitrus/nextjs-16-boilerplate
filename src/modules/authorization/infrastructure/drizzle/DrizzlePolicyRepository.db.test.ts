@@ -11,16 +11,20 @@ import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
 let acmeOrgId: string;
+let globexOrgId: string;
 let acmeOwnerRoleId: string;
 let acmeMemberRoleId: string;
+let globexOwnerRoleId: string;
 
 beforeAll(async () => {
   testDb = await resolveTestDb();
   const users = await seedUsers(testDb.db);
   const auth = await seedAuthorization(testDb.db, { users });
   acmeOrgId = auth.orgs.acmeHq.id;
+  globexOrgId = auth.orgs.globexHq.id;
   acmeOwnerRoleId = auth.roles.acmeOwner.id;
   acmeMemberRoleId = auth.roles.acmeMember.id;
+  globexOwnerRoleId = auth.roles.globexOwner.id;
 });
 
 afterAll(async () => {
@@ -71,6 +75,37 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     });
 
     expect(policies).toEqual([]);
+  });
+
+  it('does not cross organization boundaries when a role belongs to another org', async () => {
+    const repo = new DrizzlePolicyRepository(testDb.db);
+
+    const acmeWithGlobexRole = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: acmeOrgId },
+      subject: { id: baseContext.subject.id, roles: [globexOwnerRoleId] },
+    });
+
+    const globexWithAcmeRole = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: globexOrgId },
+      subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
+    });
+
+    expect(acmeWithGlobexRole).toEqual([]);
+    expect(globexWithAcmeRole).toEqual([]);
+  });
+
+  it('returns Globex policies only when both organization and role belong to Globex', async () => {
+    const repo = new DrizzlePolicyRepository(testDb.db);
+
+    const policies = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: globexOrgId },
+      subject: { id: baseContext.subject.id, roles: [globexOwnerRoleId] },
+    });
+
+    expect(policies.length).toBeGreaterThan(0);
   });
 
   it('returns owner policies for owner role', async () => {

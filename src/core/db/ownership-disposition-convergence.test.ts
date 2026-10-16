@@ -95,65 +95,44 @@ describe('runOwnershipDispositionConvergence', () => {
       },
     };
 
-    const snapshots: OwnershipDispositionEvidence[] = [
-      evidence({
-        auditEvents: {
-          counts: {
-            ...table('audit_events').counts,
-            total: 1,
-            unresolvedLegacy: 1,
-          },
-          dispositionSettled: false,
-          plannedAction: 'blocked-unsettled-rows',
+    const before = evidence({
+      auditEvents: {
+        counts: {
+          ...table('audit_events').counts,
+          total: 1,
+          unresolvedLegacy: 1,
         },
-      }),
-      evidence({
-        featureFlags: validated('feature_flags'),
-        auditEvents: {
-          counts: {
-            ...table('audit_events').counts,
-            total: 1,
-            unresolvedLegacy: 1,
-          },
-          dispositionSettled: false,
-          plannedAction: 'blocked-unsettled-rows',
-        },
-      }),
-      evidence({
-        featureFlags: validated('feature_flags'),
-        auditLogSettings: validated('audit_log_settings'),
-        auditEvents: {
-          counts: {
-            ...table('audit_events').counts,
-            total: 1,
-            unresolvedLegacy: 1,
-          },
-          dispositionSettled: false,
-          plannedAction: 'blocked-unsettled-rows',
-        },
-      }),
-      evidence({
-        featureFlags: validated('feature_flags'),
-        auditLogSettings: validated('audit_log_settings'),
-        auditEvents: {
-          counts: {
-            ...table('audit_events').counts,
-            total: 1,
-            unresolvedLegacy: 1,
-          },
-          dispositionSettled: false,
-          plannedAction: 'blocked-unsettled-rows',
-        },
-      }),
-    ];
+        dispositionSettled: false,
+        plannedAction: 'blocked-unsettled-rows',
+      },
+    });
+
+    const inspectedTables: string[] = [];
+    let fullReads = 0;
 
     const result = await runOwnershipDispositionConvergence(runner, {
       gatherEvidence: async () => {
-        const next = snapshots.shift();
-        if (!next) throw new Error('Unexpected evidence read');
-        return next;
+        fullReads++;
+        if (fullReads !== 1) {
+          throw new Error('Unexpected repeated full-table inspection');
+        }
+        return before;
+      },
+      gatherTableEvidence: async (_runner, name) => {
+        inspectedTables.push(name);
+        if (name === 'audit_events') {
+          throw new Error('Unrelated audit_events rescan');
+        }
+        return table(name, validated(name));
       },
     });
+
+    expect(fullReads).toBe(1);
+    expect(inspectedTables).toEqual(['feature_flags', 'audit_log_settings']);
+
+    expect(result.after.featureFlags.gateReady).toBe(true);
+    expect(result.after.auditLogSettings.gateReady).toBe(true);
+    expect(result.after.auditEvents).toBe(before.auditEvents);
 
     expect(result.outcomes).toEqual([
       { table: 'feature_flags', action: 'validated' },
@@ -210,6 +189,9 @@ describe('runOwnershipDispositionConvergence', () => {
 
     const result = await runOwnershipDispositionConvergence(runner, {
       gatherEvidence: async () => ready,
+      gatherTableEvidence: async () => {
+        throw new Error('No post-validation inspection expected');
+      },
     });
 
     expect(result.outcomes).toEqual([
@@ -244,6 +226,9 @@ describe('runOwnershipDispositionConvergence', () => {
         gatherEvidence: async () => {
           throw new Error('must not inspect after lock failure');
         },
+        gatherTableEvidence: async () => {
+          throw new Error('must not inspect after lock failure');
+        },
       }),
     ).rejects.toBeInstanceOf(
       OwnershipDispositionConvergenceAlreadyRunningError,
@@ -256,6 +241,59 @@ describe('runOwnershipDispositionConvergence', () => {
     expect(sql.some((statement) => statement.startsWith('ALTER TABLE'))).toBe(
       false,
     );
+  });
+
+  it('rejects post-validation evidence for another table', async () => {
+    const sql: string[] = [];
+
+    const runner: SqlRunner = {
+      query: async <T>(statement: string) => {
+        sql.push(statement);
+
+        if (statement.includes('pg_try_advisory_lock')) {
+          return [{ acquired: true }] as T[];
+        }
+
+        return [] as T[];
+      },
+    };
+
+    let fullReads = 0;
+    const inspectedTables: string[] = [];
+
+    await expect(
+      runOwnershipDispositionConvergence(runner, {
+        gatherEvidence: async () => {
+          fullReads++;
+          return evidence();
+        },
+        gatherTableEvidence: async (_runner, name) => {
+          inspectedTables.push(name);
+
+          // Deliberately return gate-ready evidence for a DIFFERENT table.
+          return table('audit_log_settings', validated('audit_log_settings'));
+        },
+      }),
+    ).rejects.toThrow(/did not leave the table gate-ready/);
+
+    expect(fullReads).toBe(1);
+    expect(inspectedTables).toEqual(['feature_flags']);
+
+    expect(
+      sql.filter((statement) => statement.startsWith('ALTER TABLE')),
+    ).toEqual([
+      'ALTER TABLE "public"."feature_flags" VALIDATE CONSTRAINT "ck_feature_flags_ownership_state_org"',
+    ]);
+
+    expect(
+      sql.some((statement) =>
+        statement.includes('ALTER TABLE "public"."audit_log_settings"'),
+      ),
+    ).toBe(false);
+
+    expect(
+      sql.some((statement) => statement.includes('pg_advisory_unlock')),
+    ).toBe(true);
   });
 
   it('fails closed when VALIDATE does not produce a gate-ready table and still releases the lock', async () => {
@@ -278,6 +316,7 @@ describe('runOwnershipDispositionConvergence', () => {
     await expect(
       runOwnershipDispositionConvergence(runner, {
         gatherEvidence: async () => unchanged,
+        gatherTableEvidence: async (_runner, name) => table(name),
       }),
     ).rejects.toThrow(/did not leave the table gate-ready/);
 

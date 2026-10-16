@@ -1,5 +1,6 @@
 import {
   gatherOwnershipDispositionEvidence,
+  gatherOwnershipDispositionTableEvidence,
   OWNERSHIP_DISPOSITION_SPECS,
   type OwnershipDispositionEvidence,
   type OwnershipDispositionTable,
@@ -32,6 +33,7 @@ export interface OwnershipDispositionConvergenceResult {
 
 export interface OwnershipDispositionConvergenceDeps {
   readonly gatherEvidence: typeof gatherOwnershipDispositionEvidence;
+  readonly gatherTableEvidence: typeof gatherOwnershipDispositionTableEvidence;
 }
 
 export class OwnershipDispositionConvergenceAlreadyRunningError extends Error {
@@ -134,6 +136,7 @@ export async function runOwnershipDispositionConvergence(
   runner: SqlRunner,
   deps: OwnershipDispositionConvergenceDeps = {
     gatherEvidence: gatherOwnershipDispositionEvidence,
+    gatherTableEvidence: gatherOwnershipDispositionTableEvidence,
   },
 ): Promise<OwnershipDispositionConvergenceResult> {
   await acquireLock(runner);
@@ -141,6 +144,10 @@ export async function runOwnershipDispositionConvergence(
   try {
     const before = await deps.gatherEvidence(runner);
     const outcomes: OwnershipDispositionConvergenceOutcome[] = [];
+    const verifiedTables = new Map<
+      OwnershipDispositionTable,
+      OwnershipDispositionTableEvidence
+    >();
     let timeoutsSet = false;
 
     for (const spec of OWNERSHIP_DISPOSITION_SPECS) {
@@ -166,10 +173,10 @@ export async function runOwnershipDispositionConvergence(
 
       await validateOne(runner, spec.table, spec.constraint);
 
-      const postValidation = await deps.gatherEvidence(runner);
-      const verified = tableEvidence(postValidation, spec.table);
+      const verified = await deps.gatherTableEvidence(runner, spec.table);
 
       if (
+        verified.table !== spec.table ||
         verified.constraint.state !== 'exact-validated' ||
         !verified.constraint.definitionMatches ||
         !verified.constraint.validated ||
@@ -184,13 +191,23 @@ export async function runOwnershipDispositionConvergence(
         );
       }
 
+      verifiedTables.set(spec.table, verified);
+
       outcomes.push({
         table: spec.table,
         action: 'validated',
       });
     }
 
-    const after = await deps.gatherEvidence(runner);
+    // Validated tables have fresh post-DDL evidence.
+    // Untouched tables retain their preflight evidence.
+    // Do not rescan unrelated tables under the validation timeout.
+    const after: OwnershipDispositionEvidence = {
+      featureFlags: verifiedTables.get('feature_flags') ?? before.featureFlags,
+      auditLogSettings:
+        verifiedTables.get('audit_log_settings') ?? before.auditLogSettings,
+      auditEvents: verifiedTables.get('audit_events') ?? before.auditEvents,
+    };
 
     return {
       before,

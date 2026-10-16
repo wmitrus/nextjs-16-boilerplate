@@ -223,15 +223,19 @@ describe('db-ownership-disposition-gate run', () => {
       return {
         before: current,
         outcomes: [
-          { table: 'feature_flags', action: 'no-op' },
-          { table: 'audit_log_settings', action: 'no-op' },
+          { table: 'feature_flags', action: 'validated' },
+          { table: 'audit_log_settings', action: 'validated' },
           { table: 'audit_events', action: 'blocked-unsettled-rows' },
         ] as const,
-        after: current,
+        after: {
+          ...current,
+          featureFlags: table('feature_flags', true),
+          auditLogSettings: table('audit_log_settings', true),
+        },
       };
     });
 
-    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     await run(['--apply', '--production-approved'], {
       gatherEvidence,
@@ -247,6 +251,22 @@ describe('db-ownership-disposition-gate run', () => {
       'journal-assert',
       'converge',
     ]);
+
+    const output = logSpy.mock.calls
+      .map((args) => args.map(String).join(' '))
+      .join('\n');
+
+    expect(output).toContain('Evidence provenance:');
+    expect(output).toContain('feature_flags: post-validation reinspection');
+    expect(output).toContain(
+      'audit_log_settings: post-validation reinspection',
+    );
+    expect(output).toContain(
+      'audit_events: preflight snapshot (not rescanned)',
+    );
+
+    expect(gatherEvidence).toHaveBeenCalledOnce();
+    expect(runner.query).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledOnce();
   });
 

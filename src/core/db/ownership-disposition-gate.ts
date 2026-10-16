@@ -392,6 +392,32 @@ async function inspectTable(
 }
 
 /**
+ * Inspect one ownership table independently.
+ *
+ * Uses the same row-count, invalid-tuple and structural CHECK inspection
+ * as the complete evidence report.
+ *
+ * This is intentionally read-only and fail-closed. It allows convergence
+ * to verify a validated constraint without scanning unrelated tables.
+ */
+export async function gatherOwnershipDispositionTableEvidence(
+  runner: SqlRunner,
+  table: OwnershipDispositionTable,
+): Promise<OwnershipDispositionTableEvidence> {
+  const spec = OWNERSHIP_DISPOSITION_SPECS.find(
+    (candidate) => candidate.table === table,
+  );
+
+  if (!spec) {
+    throw new Error(
+      `[ownership-disposition-gate] unsupported ownership table: ${String(table)}`,
+    );
+  }
+
+  return inspectTable(runner, spec);
+}
+
+/**
  * OZI-213 — read-only, per-table ownership disposition inspection.
  *
  * Issues SELECTs only. There is deliberately no aggregate "all tables ready"
@@ -413,7 +439,10 @@ export async function gatherOwnershipDispositionEvidence(
   >();
 
   for (const spec of OWNERSHIP_DISPOSITION_SPECS) {
-    byTable.set(spec.table, await inspectTable(runner, spec));
+    byTable.set(
+      spec.table,
+      await gatherOwnershipDispositionTableEvidence(runner, spec.table),
+    );
   }
 
   const featureFlags = byTable.get('feature_flags');

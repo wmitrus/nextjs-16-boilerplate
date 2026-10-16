@@ -265,7 +265,21 @@ export async function run(
     console.log(formatOutcomes(result));
 
     console.log('');
-    console.log(formatEvidence(result.after, 'after-apply'));
+    console.log(
+      [
+        'Evidence provenance:',
+        ...result.outcomes.map(
+          (outcome) =>
+            `  ${outcome.table}: ${
+              outcome.action === 'validated'
+                ? 'post-validation reinspection'
+                : 'preflight snapshot (not rescanned)'
+            }`,
+        ),
+        '',
+        formatEvidence(result.after, 'after-apply'),
+      ].join('\n'),
+    );
 
     console.log('');
     console.log(

@@ -1,3 +1,15 @@
+# [2.24.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.23.0...v2.24.0) (2026-10-16)
+
+
+### Bug Fixes
+
+* **db:** avoid repeated ownership disposition scans ([0784b42](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0784b42284791ecf04167cfb15378e4bc5217a23))
+
+
+### Features
+
+* **db:** add ownership disposition production gate ([a63de2f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a63de2ff64776847d740f07785aeb606d55c4135))
+
 # [2.23.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.22.0...v2.23.0) (2026-10-16)
 
 

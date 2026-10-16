@@ -25,6 +25,13 @@ artifacts, or large repository guides.
 ## Always-On Invariants
 
 - Use `pnpm` for repository scripts and dependency operations.
+- Before proposing or running any repository command, inspect `package.json`
+  first and prefer the existing project script when one already covers the
+  required operation. Do not invent an alternative CLI invocation when the
+  repository already defines the workflow.
+- For formatting/lint autofix, use only `pnpm lint --fix`. Do not run
+  `prettier`, `eslint`, `pnpm prettier`, or `pnpm eslint` directly unless the
+  repository contract is explicitly changed.
 - Preserve unrelated and pre-existing working-tree changes.
 - Inspect surrounding code and existing patterns before proposing or making a
   change.

@@ -7,6 +7,8 @@ import {
   CrossProviderLinkingNotAllowedError,
   MissingProvisioningInputError,
   TenantContextRequiredError,
+  TenantOrganizationLimitReachedError,
+  TenantOrganizationQuotaNotConfiguredError,
   TenantUserLimitReachedError,
 } from '../domain/errors';
 
@@ -25,6 +27,18 @@ describe('classifyProvisioningFailure', () => {
       'TENANT_USER_LIMIT_REACHED',
       'quota_exceeded',
       'warn',
+    ],
+    [
+      new TenantOrganizationLimitReachedError(),
+      'TENANT_ORGANIZATION_LIMIT_REACHED',
+      'quota_exceeded',
+      'warn',
+    ],
+    [
+      new TenantOrganizationQuotaNotConfiguredError(),
+      'TENANT_ORGANIZATION_QUOTA_NOT_CONFIGURED',
+      'tenant_config',
+      'error',
     ],
     [
       new TenantContextRequiredError(),

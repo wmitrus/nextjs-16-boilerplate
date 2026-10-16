@@ -8,13 +8,14 @@ export default defineConfig({
     name: 'integration',
     environment: 'jsdom',
     globals: true,
+    maxWorkers: 16,
     setupFiles: ['./tests/setup.tsx', './tests/polyfills.ts'],
     include: [
       'src/**/*.integration.test.{ts,tsx}',
       'src/testing/integration/**/*.test.{ts,tsx}',
     ],
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage/integration',

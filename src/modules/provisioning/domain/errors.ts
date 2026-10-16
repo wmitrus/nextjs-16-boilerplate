@@ -12,6 +12,30 @@ export class TenantUserLimitReachedError extends Error {
 }
 
 /**
+ * Thrown when creating another Organization would exceed the Tenant's
+ * configured maxOrganizations quota.
+ */
+export class TenantOrganizationLimitReachedError extends Error {
+  constructor(message = 'Organization limit reached for this tenant.') {
+    super(message);
+    this.name = 'TenantOrganizationLimitReachedError';
+  }
+}
+
+/**
+ * Thrown when organization creation cannot find the Tenant quota row that
+ * must define maxOrganizations.
+ */
+export class TenantOrganizationQuotaNotConfiguredError extends Error {
+  constructor(
+    message = 'Organization quota is not configured for this tenant.',
+  ) {
+    super(message);
+    this.name = 'TenantOrganizationQuotaNotConfiguredError';
+  }
+}
+
+/**
  * Thrown when provisioning mode requires a tenant context (activeTenantId or tenantExternalId)
  * but none was provided in ProvisioningInput.
  * Applies when bootstrap/provisioning lacks the required organization context.

@@ -19,9 +19,10 @@ export default defineConfig({
     // `pnpm test:db:ci` (the required CI job) for those instead.
     include: ['src/**/*.db.test.ts'],
     pool: 'threads',
+    maxWorkers: 16,
     testTimeout: 30_000,
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage/db',

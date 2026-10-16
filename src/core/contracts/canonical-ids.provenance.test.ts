@@ -6,7 +6,9 @@ import {
   internalOrganizationIdFromOrgRow,
   internalUserIdFromUsersRow,
   isCanonicalIdRepresentation,
+  organizationIdFromProvisioningGeneratedUuid,
   parentTenantIdFromOrgRow,
+  tenantIdFromProvisioningGeneratedUuid,
   tenantIdFromTenantsRow,
 } from './canonical-ids.provenance';
 
@@ -27,12 +29,18 @@ describe('canonical-ids provenance constructors', () => {
     const orgId: OrganizationId = internalOrganizationIdFromOrgRow(UUID_A);
     const parentTenantId: TenantId = parentTenantIdFromOrgRow(UUID_B);
     const tenantId: TenantId = tenantIdFromTenantsRow(UUID_B);
+    const generatedTenantId: TenantId =
+      tenantIdFromProvisioningGeneratedUuid(UUID_B);
+    const generatedOrganizationId: OrganizationId =
+      organizationIdFromProvisioningGeneratedUuid(UUID_A);
 
     // Branding is compile-time only: the runtime value is the string itself.
     expect(userId).toBe(UUID_A);
     expect(orgId).toBe(UUID_A);
     expect(parentTenantId).toBe(UUID_B);
     expect(tenantId).toBe(UUID_B);
+    expect(generatedTenantId).toBe(UUID_B);
+    expect(generatedOrganizationId).toBe(UUID_A);
   });
 
   it('reject a non-UUID value as a representation contradiction', () => {
@@ -54,6 +62,12 @@ describe('canonical-ids provenance constructors', () => {
         CanonicalIdRepresentationError,
       );
       expect(() => tenantIdFromTenantsRow(bad)).toThrow(
+        CanonicalIdRepresentationError,
+      );
+      expect(() => tenantIdFromProvisioningGeneratedUuid(bad)).toThrow(
+        CanonicalIdRepresentationError,
+      );
+      expect(() => organizationIdFromProvisioningGeneratedUuid(bad)).toThrow(
         CanonicalIdRepresentationError,
       );
     }

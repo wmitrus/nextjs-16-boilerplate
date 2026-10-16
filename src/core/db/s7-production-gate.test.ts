@@ -8,9 +8,14 @@ import {
   type S7ProductionEvidence,
 } from './s7-production-gate';
 
-function runnerWithRow(row: unknown): SqlRunner {
+function runnerWithRows(...rows: unknown[]): SqlRunner {
+  let call = 0;
+
   return {
-    query: async <T>() => [row as T],
+    query: async <T>() => {
+      const row = rows[call++];
+      return row === undefined ? [] : [row as T];
+    },
   };
 }
 
@@ -25,13 +30,15 @@ const canonical: S7ProductionEvidence = {
 
 describe('gatherS7ProductionEvidence', () => {
   it('recognizes a pre-0008 schema and allows migrations to bootstrap forward', async () => {
-    const runner = runnerWithRow({
+    const runner = runnerWithRows({
       policies_table_exists: true,
       policies_tenant_id_exists: true,
       policies_organization_id_exists: false,
       waitlist_tenant_id_exists: false,
       policies_is_nullable: null,
       policies_helper_check_exists: false,
+      organizations_table_exists: false,
+      waitlist_table_exists: false,
     });
 
     await expect(gatherS7ProductionEvidence(runner)).resolves.toEqual({
@@ -45,13 +52,15 @@ describe('gatherS7ProductionEvidence', () => {
   });
 
   it('recognizes a completely fresh database as pre-S7', async () => {
-    const runner = runnerWithRow({
+    const runner = runnerWithRows({
       policies_table_exists: false,
       policies_tenant_id_exists: false,
       policies_organization_id_exists: false,
       waitlist_tenant_id_exists: false,
       policies_is_nullable: null,
       policies_helper_check_exists: false,
+      organizations_table_exists: false,
+      waitlist_table_exists: false,
     });
 
     const evidence = await gatherS7ProductionEvidence(runner);
@@ -59,14 +68,50 @@ describe('gatherS7ProductionEvidence', () => {
     expect(evidence.preS7Schema).toBe(true);
   });
 
+  it('fails closed when policies is missing but 0008+ schema artifacts remain', async () => {
+    const runner = runnerWithRows({
+      policies_table_exists: false,
+      policies_tenant_id_exists: false,
+      policies_organization_id_exists: false,
+      waitlist_tenant_id_exists: false,
+      policies_is_nullable: null,
+      policies_helper_check_exists: false,
+      organizations_table_exists: true,
+      waitlist_table_exists: true,
+    });
+
+    await expect(gatherS7ProductionEvidence(runner)).rejects.toThrow(
+      /unknown schema drift/i,
+    );
+  });
+
+  it('fails closed when organization_id was renamed back on a 0008+ schema', async () => {
+    const runner = runnerWithRows({
+      policies_table_exists: true,
+      policies_tenant_id_exists: true,
+      policies_organization_id_exists: false,
+      waitlist_tenant_id_exists: false,
+      policies_is_nullable: null,
+      policies_helper_check_exists: false,
+      organizations_table_exists: true,
+      waitlist_table_exists: true,
+    });
+
+    await expect(gatherS7ProductionEvidence(runner)).rejects.toThrow(
+      /unknown schema drift/i,
+    );
+  });
+
   it('fails closed when organization_id is missing from an unrecognized schema', async () => {
-    const runner = runnerWithRow({
+    const runner = runnerWithRows({
       policies_table_exists: true,
       policies_tenant_id_exists: false,
       policies_organization_id_exists: false,
       waitlist_tenant_id_exists: false,
       policies_is_nullable: null,
       policies_helper_check_exists: false,
+      organizations_table_exists: false,
+      waitlist_table_exists: false,
     });
 
     await expect(gatherS7ProductionEvidence(runner)).rejects.toThrow(

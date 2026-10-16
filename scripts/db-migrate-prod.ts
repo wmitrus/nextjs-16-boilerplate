@@ -213,9 +213,15 @@ async function runS7Preflight(
 async function runApprovedS7Convergence(
   connectionString: string,
   deps: MigrateProdDeps,
-  approved: boolean,
+  options: {
+    approved: boolean;
+    preS7Bootstrap: boolean;
+  },
 ): Promise<void> {
-  if (process.env.VERCEL_ENV === 'preview' || !approved) {
+  if (
+    process.env.VERCEL_ENV === 'preview' ||
+    (!options.approved && !options.preS7Bootstrap)
+  ) {
     return;
   }
 
@@ -305,7 +311,7 @@ export async function run(
   // DATABASE_URL_UNPOOLED (the actual trust boundary, enforced above).
   assertNoKnownPoolerMarker(connectionString, 'db-migrate-prod');
 
-  await runS7Preflight(connectionString, deps, {
+  const s7Preflight = await runS7Preflight(connectionString, deps, {
     approved: s7Approved,
     checkOnly: dryRun,
   });
@@ -420,7 +426,10 @@ export async function run(
   assertMigrationJournalComplete(journalSummary);
 
   await runPreviewConvergence(connectionString, deps);
-  await runApprovedS7Convergence(connectionString, deps, s7Approved);
+  await runApprovedS7Convergence(connectionString, deps, {
+    approved: s7Approved,
+    preS7Bootstrap: s7Preflight.preS7Schema,
+  });
 }
 
 const isMain =

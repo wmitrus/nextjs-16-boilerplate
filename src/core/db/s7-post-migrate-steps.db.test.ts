@@ -235,13 +235,19 @@ describe('runS7PostMigrateSteps (DB)', () => {
     expect(await policiesNullable()).toBe('NO');
   });
 
-  it('recognizes a pre-0008 policies shape on a real database', async () => {
+  it('recognizes a genuine pre-0008 schema shape on a real database', async () => {
     await testDb.db
       .transaction(async (tx) => {
         await tx.execute(sql`
-        ALTER TABLE public.policies
-        RENAME COLUMN organization_id TO tenant_id
-      `);
+          ALTER TABLE public.policies
+          RENAME COLUMN organization_id TO tenant_id
+        `);
+
+        // 0008 introduced both tables. Removing them inside this rollback-only
+        // transaction reconstructs the durable pre-0008 signature that the
+        // production gate relies on.
+        await tx.execute(sql`DROP TABLE public.waitlist_entries CASCADE`);
+        await tx.execute(sql`DROP TABLE public.organizations CASCADE`);
 
         const runner = sqlRunnerFromDrizzle(tx, (text) => sql.raw(text));
         const evidence = await gatherS7ProductionEvidence(runner);
@@ -261,6 +267,35 @@ describe('runS7PostMigrateSteps (DB)', () => {
         if (
           !(error instanceof Error) ||
           error.message !== 'ROLLBACK_PRE_S7_TEST'
+        ) {
+          throw error;
+        }
+      });
+
+    expect(await policiesNullable()).toBe('NO');
+    expect(await waitlistTenantIdExists()).toBe(false);
+  });
+
+  it('fails closed on a renamed-back policies column when 0008+ tables remain', async () => {
+    await testDb.db
+      .transaction(async (tx) => {
+        await tx.execute(sql`
+          ALTER TABLE public.policies
+          RENAME COLUMN organization_id TO tenant_id
+        `);
+
+        const runner = sqlRunnerFromDrizzle(tx, (text) => sql.raw(text));
+
+        await expect(gatherS7ProductionEvidence(runner)).rejects.toThrow(
+          /unknown schema drift/i,
+        );
+
+        throw new Error('ROLLBACK_S7_DRIFT_TEST');
+      })
+      .catch((error: unknown) => {
+        if (
+          !(error instanceof Error) ||
+          error.message !== 'ROLLBACK_S7_DRIFT_TEST'
         ) {
           throw error;
         }

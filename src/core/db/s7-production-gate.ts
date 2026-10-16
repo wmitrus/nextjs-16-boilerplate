@@ -37,6 +37,8 @@ export async function gatherS7ProductionEvidence(
     waitlist_tenant_id_exists: boolean;
     policies_is_nullable: 'YES' | 'NO' | null;
     policies_helper_check_exists: boolean;
+    organizations_table_exists: boolean;
+    waitlist_table_exists: boolean;
   }>(
     `SELECT
        to_regclass('public.policies') IS NOT NULL AS policies_table_exists,
@@ -77,7 +79,11 @@ export async function gatherS7ProductionEvidence(
             AND rel.relname = 'policies'
             AND c.conname = '${S7_POLICIES_CHECK_NAME}'
             AND c.contype = 'c'
-       ) AS policies_helper_check_exists`,
+       ) AS policies_helper_check_exists,
+       to_regclass('public.organizations') IS NOT NULL
+         AS organizations_table_exists,
+       to_regclass('public.waitlist_entries') IS NOT NULL
+         AS waitlist_table_exists`,
   );
 
   const state = columnRows[0];
@@ -86,7 +92,15 @@ export async function gatherS7ProductionEvidence(
   }
 
   if (!state.policies_organization_id_exists) {
+    // Migration 0008 introduces both organizations and waitlist_entries while
+    // renaming policies.tenant_id -> policies.organization_id. Their presence
+    // is durable evidence that this database has reached the auth-foundation
+    // era, even if the policies table/column was later damaged manually.
+    const authFoundationReached =
+      state.organizations_table_exists || state.waitlist_table_exists;
+
     const legitimatePreS7 =
+      !authFoundationReached &&
       !state.waitlist_tenant_id_exists &&
       !state.policies_helper_check_exists &&
       (!state.policies_table_exists || state.policies_tenant_id_exists);

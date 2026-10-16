@@ -264,7 +264,16 @@ describe('db-migrate-prod VERCEL_ENV=preview auto-convergence (Codex P2 restore)
     await run([], h.deps);
 
     expect(mockSpawnSync).toHaveBeenCalledTimes(1);
-    expect(h.runS7Convergence).not.toHaveBeenCalled();
+    expect(h.runS7Convergence).toHaveBeenCalledTimes(1);
+
+    const journalOrder = (assertMigrationJournalComplete as unknown as Mock)
+      .mock.invocationCallOrder[0]!;
+    const convergeOrder = h.runS7Convergence.mock.invocationCallOrder[0]!;
+
+    expect(mockSpawnSync.mock.invocationCallOrder[0]).toBeLessThan(
+      convergeOrder,
+    );
+    expect(journalOrder).toBeLessThan(convergeOrder);
   });
 
   it('Production with pending S7 and no approval fails before drizzle migration starts', async () => {

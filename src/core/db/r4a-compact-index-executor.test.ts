@@ -64,7 +64,11 @@ function inspection(
   };
 }
 function runner(
-  options: { lock?: boolean; fail?: string } = {},
+  options: {
+    lock?: boolean;
+    fail?: string;
+    settings?: Record<string, unknown>;
+  } = {},
 ): R4aCompactIndexSqlRunner & { sql: string[] } {
   const sql: string[] = [];
   return {
@@ -75,13 +79,28 @@ function runner(
         throw new Error('db failure');
       if (statement.includes('pg_try_advisory_lock'))
         return [{ ok: options.lock ?? true }] as T[];
+      if (statement.includes("current_setting('lock_timeout')"))
+        return [
+          options.settings ?? {
+            lock_timeout: "5s'x",
+            statement_timeout: '1min',
+          },
+        ] as T[];
       return [] as T[];
     },
   };
 }
+const ddl = (sql: readonly string[]) =>
+  sql.filter((statement) => /CREATE UNIQUE INDEX|DROP INDEX/.test(statement));
+const firstIndex = (sql: readonly string[], fragment: string) =>
+  sql.findIndex((statement) => statement.includes(fragment));
+const RESTORE =
+  "SELECT set_config('lock_timeout', '5s''x', false), set_config('statement_timeout', '1min', false)";
 
 describe('r4a compact-index executor', () => {
-  beforeEach(() => inspect.mockReset());
+  beforeEach(() => {
+    inspect.mockReset();
+  });
   it('creates once and reinspects', async () => {
     inspect
       .mockResolvedValueOnce(inspection('eligible-to-create'))
@@ -149,5 +168,95 @@ describe('r4a compact-index executor', () => {
     await expect(
       runR4aCompactIndexExecutor(db, ['feature_flags']),
     ).rejects.toThrow('did not converge');
+  });
+
+  describe('session timeouts', () => {
+    it('applies the policy after the lock and before the first preflight', async () => {
+      const db = runner();
+      let seenAtPreflight: string[] = [];
+      inspect.mockImplementation(async () => {
+        if (seenAtPreflight.length === 0) seenAtPreflight = [...db.sql];
+        return inspection('already-converged');
+      });
+      await runR4aCompactIndexExecutor(db, ['feature_flags']);
+      const lock = firstIndex(seenAtPreflight, 'pg_try_advisory_lock');
+      expect(lock).toBe(0);
+      expect(firstIndex(seenAtPreflight, 'SET lock_timeout = 3000')).toBe(
+        lock + 2,
+      );
+      expect(firstIndex(seenAtPreflight, 'SET statement_timeout = 0')).toBe(
+        lock + 3,
+      );
+      expect(db.sql.slice(-2)).toEqual([
+        RESTORE,
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+    });
+
+    it('runs recovery DROP/CREATE under the active policy', async () => {
+      inspect
+        .mockResolvedValueOnce(inspection('invalid-index-recovery-required'))
+        .mockResolvedValueOnce(inspection('already-converged'));
+      const db = runner();
+      await runR4aCompactIndexExecutor(db, ['feature_flags']);
+      const drop = firstIndex(db.sql, 'DROP INDEX CONCURRENTLY');
+      expect(firstIndex(db.sql, 'SET lock_timeout')).toBeLessThan(drop);
+      expect(firstIndex(db.sql, 'SET statement_timeout')).toBeLessThan(drop);
+      expect(firstIndex(db.sql, 'set_config')).toBeGreaterThan(drop);
+    });
+
+    it('restores settings and releases the lock when a preflight times out', async () => {
+      inspect.mockImplementation(async () => {
+        throw new Error('canceling statement due to lock timeout');
+      });
+      const db = runner();
+      await expect(
+        runR4aCompactIndexExecutor(db, ['feature_flags']),
+      ).rejects.toThrow('lock timeout');
+      expect(ddl(db.sql)).toEqual([]);
+      expect(db.sql.slice(-2)).toEqual([
+        RESTORE,
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+    });
+
+    it('refuses to inspect or run DDL when applying a timeout fails', async () => {
+      const db = runner({ fail: 'SET statement_timeout' });
+      await expect(
+        runR4aCompactIndexExecutor(db, ['feature_flags']),
+      ).rejects.toThrow('db failure');
+      expect(inspect).not.toHaveBeenCalled();
+      expect(ddl(db.sql)).toEqual([]);
+      expect(db.sql.slice(-2)).toEqual([
+        RESTORE,
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+    });
+
+    it.each([
+      ['a failed read', { fail: "current_setting('lock_timeout')" }],
+      ['an unreadable row', { settings: { lock_timeout: null } }],
+    ])(
+      'fails closed on %s of the current settings',
+      async (_label, options) => {
+        const db = runner(options);
+        await expect(
+          runR4aCompactIndexExecutor(db, ['feature_flags']),
+        ).rejects.toThrow();
+        expect(inspect).not.toHaveBeenCalled();
+        expect(db.sql.some((sql) => sql.startsWith('SET '))).toBe(false);
+        expect(db.sql.some((sql) => sql.includes('set_config'))).toBe(false);
+        expect(db.sql.at(-1)).toContain('pg_advisory_unlock');
+      },
+    );
+
+    it('still releases the lock when restoring the settings fails', async () => {
+      inspect.mockResolvedValue(inspection('already-converged'));
+      const db = runner({ fail: 'set_config' });
+      await expect(
+        runR4aCompactIndexExecutor(db, ['feature_flags']),
+      ).rejects.toThrow('db failure');
+      expect(db.sql.at(-1)).toContain('pg_advisory_unlock');
+    });
   });
 });

@@ -1,5 +1,5 @@
 import tsconfigPaths from 'vite-tsconfig-paths';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
@@ -18,6 +18,13 @@ export default defineConfig({
     // or fails. Use `pnpm test:db:local` (real Postgres, both suites) or
     // `pnpm test:db:ci` (the required CI job) for those instead.
     include: ['src/**/*.db.test.ts'],
+    // The R4a executor suite needs real CREATE/DROP INDEX CONCURRENTLY and
+    // starts its own Testcontainers PostgreSQL, so it cannot run on PGlite
+    // without Docker. It runs in full under `pnpm test:db:ci`.
+    exclude: [
+      ...configDefaults.exclude,
+      'src/core/db/r4a-compact-index-executor.db.test.ts',
+    ],
     pool: 'threads',
     maxWorkers: 16,
     testTimeout: 30_000,

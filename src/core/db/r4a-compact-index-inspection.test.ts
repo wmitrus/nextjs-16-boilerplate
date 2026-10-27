@@ -92,6 +92,7 @@ function runner(
     invalid?: Partial<Record<'feature_flags' | 'audit_log_settings', number>>;
     throwCatalog?: boolean;
     ambiguousCatalog?: boolean;
+    unvalidatedCheck?: boolean;
   } = {},
 ): R4aCompactIndexSqlRunner {
   const indexes = new Map(
@@ -128,7 +129,7 @@ function runner(
       if (statement.includes('FROM pg_constraint')) {
         return [
           {
-            convalidated: true,
+            convalidated: !options.unvalidatedCheck,
             connoinherit: false,
             expression:
               "ownership_state = 'canonical_organization'::text AND organization_id IS NOT NULL OR (ownership_state = ANY (ARRAY['intentional_global'::text, 'unresolved_legacy'::text, 'quarantined'::text])) AND organization_id IS NULL",
@@ -326,6 +327,94 @@ describe('r4a-compact-index-inspection', () => {
     await expect(
       inspectR4aCompactIndex(runner({ indexes }), 'feature_flags'),
     ).resolves.toMatchObject({ decision: 'invalid-index-recovery-required' });
+  });
+
+  describe('ownership gate precedes INVALID recovery', () => {
+    const invalidTarget = (override: IndexRow = {}) => ({
+      uq_feature_flags_key_organization_compact: {
+        ...index('feature_flags', ['key', 'organization_id'], true, null),
+        indisvalid: false,
+        indisready: false,
+        indislive: true,
+        ...override,
+      },
+    });
+
+    it.each([
+      ['unresolved rows', { unsettled: { feature_flags: 1 } }],
+      ['invalid ownership combinations', { invalid: { feature_flags: 1 } }],
+      ['an unvalidated ownership CHECK', { unvalidatedCheck: true }],
+    ])(
+      'blocks an exact INVALID/not-ready/live target with %s',
+      async (_label, gate) => {
+        await expect(
+          inspectR4aCompactIndex(
+            runner({ indexes: invalidTarget(), ...gate }),
+            'feature_flags',
+          ),
+        ).resolves.toMatchObject({
+          decision: 'blocked-by-disposition',
+          reasons: ['table-specific-ownership-disposition-not-ready'],
+        });
+      },
+    );
+
+    it('blocks an exact valid-but-not-ready target with an unsettled table', async () => {
+      await expect(
+        inspectR4aCompactIndex(
+          runner({
+            indexes: invalidTarget({ indisvalid: true }),
+            unsettled: { feature_flags: 1 },
+          }),
+          'feature_flags',
+        ),
+      ).resolves.toMatchObject({ decision: 'blocked-by-disposition' });
+    });
+
+    it('still reports schema drift ahead of an unready gate', async () => {
+      await expect(
+        inspectR4aCompactIndex(
+          runner({
+            indexes: invalidTarget({ table_schema: 'shadow' }),
+            unsettled: { feature_flags: 1 },
+          }),
+          'feature_flags',
+        ),
+      ).resolves.toMatchObject({
+        decision: 'blocked-by-schema-drift',
+        reasons: ['compact-index-wrong-identity-or-definition'],
+      });
+    });
+
+    it('still reports a broken retained index ahead of an unready gate', async () => {
+      await expect(
+        inspectR4aCompactIndex(
+          runner({
+            indexes: {
+              ...invalidTarget(),
+              uq_feature_flags_key_tenant: undefined,
+            },
+            unvalidatedCheck: true,
+          }),
+          'feature_flags',
+        ),
+      ).resolves.toMatchObject({
+        decision: 'blocked-by-schema-drift',
+        reasons: ['legacy-or-semantic-index-not-intact'],
+      });
+    });
+
+    it('reports recovery only once the gate is ready', async () => {
+      await expect(
+        inspectR4aCompactIndex(
+          runner({ indexes: invalidTarget() }),
+          'feature_flags',
+        ),
+      ).resolves.toMatchObject({
+        decision: 'invalid-index-recovery-required',
+        reasons: ['exact-identity-index-not-valid-ready-and-live'],
+      });
+    });
   });
 
   it('blocks only the independently unsettled audit settings table', async () => {

@@ -84,6 +84,8 @@ async function settleDisposition(connection: Sql): Promise<void> {
 }
 
 async function resetFixture(connection: Sql): Promise<void> {
+  await connection.unsafe('RESET lock_timeout');
+  await connection.unsafe('RESET statement_timeout');
   await dropCompactRelations(connection);
   await settleDisposition(connection);
 }
@@ -102,6 +104,43 @@ async function indexState(connection: Sql, name: string) {
   );
   return rows[0];
 }
+
+/** Leaves an exact-identity compact index INVALID, not ready and live. */
+async function failCompactBuild(connection: Sql): Promise<void> {
+  await connection.unsafe(
+    "INSERT INTO public.feature_flags (key, tenant_id, ownership_state) VALUES ('r4a-invalid', 'one', 'intentional_global'), ('r4a-invalid', 'two', 'unresolved_legacy')",
+  );
+  await expect(
+    connection.unsafe(
+      'CREATE UNIQUE INDEX CONCURRENTLY uq_feature_flags_key_organization_compact ON public.feature_flags USING btree (key, organization_id) NULLS NOT DISTINCT',
+    ),
+  ).rejects.toThrow();
+  expect(
+    await indexState(connection, 'uq_feature_flags_key_organization_compact'),
+  ).toMatchObject({ valid: false, ready: false, live: true });
+}
+
+/** Re-adds the identical ownership CHECK as NOT VALID; resetFixture re-validates it. */
+async function unvalidateOwnershipCheck(connection: Sql): Promise<void> {
+  const [constraint] = await connection.unsafe<{ definition: string }[]>(
+    "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'public.feature_flags'::regclass AND conname = 'ck_feature_flags_ownership_state_org'",
+  );
+  await connection.unsafe(
+    `ALTER TABLE public.feature_flags DROP CONSTRAINT ck_feature_flags_ownership_state_org, ADD CONSTRAINT ck_feature_flags_ownership_state_org ${constraint!.definition} NOT VALID`,
+  );
+}
+
+async function sessionTimeouts(connection: Sql) {
+  const [row] = await connection.unsafe<
+    { lock_timeout: string; statement_timeout: string }[]
+  >(
+    "SELECT current_setting('lock_timeout') AS lock_timeout, current_setting('statement_timeout') AS statement_timeout",
+  );
+  return row;
+}
+
+const isIndexDdl = (statement: string) =>
+  /^(CREATE UNIQUE INDEX|DROP INDEX)/.test(statement);
 
 async function retainedSnapshot(connection: Sql) {
   return connection.unsafe<{ readonly name: string; readonly kind: string }[]>(
@@ -218,35 +257,105 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
   });
 
   it('recovers a real exact INVALID and not-ready index created by a failed concurrent build', async () => {
-    await client!.unsafe(
-      "INSERT INTO public.feature_flags (key, tenant_id, ownership_state) VALUES ('r4a-invalid', 'one', 'intentional_global'), ('r4a-invalid', 'two', 'unresolved_legacy')",
-    );
-    await expect(
-      client!.unsafe(
-        'CREATE UNIQUE INDEX CONCURRENTLY uq_feature_flags_key_organization_compact ON public.feature_flags USING btree (key, organization_id) NULLS NOT DISTINCT',
-      ),
-    ).rejects.toThrow();
-    expect(
-      await indexState(client!, 'uq_feature_flags_key_organization_compact'),
-    ).toMatchObject({ valid: false, ready: false, live: true });
-
+    await failCompactBuild(client!);
     await client!.unsafe(
       "DELETE FROM public.feature_flags WHERE ownership_state = 'unresolved_legacy'",
     );
-    const result = await runR4aCompactIndexExecutor(runner(client!), [
-      'feature_flags',
-    ]);
+    await client!.unsafe("SET lock_timeout = '7s'");
+    const statements: string[] = [];
+    const result = await runR4aCompactIndexExecutor(
+      runner(client!, statements),
+      ['feature_flags'],
+    );
     expect(result).toMatchObject([
       { table: 'feature_flags', action: 'recreated-invalid' },
     ]);
     expect(
       await indexState(client!, 'uq_feature_flags_key_organization_compact'),
     ).toMatchObject({ valid: true, ready: true, live: true });
+    // Recovery DDL ran under the executor policy, and the session was restored.
+    const drop = statements.findIndex((s) => s.startsWith('DROP INDEX'));
+    expect(statements.indexOf('SET lock_timeout = 3000')).toBeGreaterThan(-1);
+    expect(statements.indexOf('SET lock_timeout = 3000')).toBeLessThan(drop);
+    expect(statements.indexOf('SET statement_timeout = 0')).toBeLessThan(drop);
+    await expect(sessionTimeouts(client!)).resolves.toEqual({
+      lock_timeout: '7s',
+      statement_timeout: '0',
+    });
+  });
+
+  it.each([
+    ['unresolved ownership rows', async () => {}],
+    [
+      'an unvalidated ownership CHECK',
+      async () => {
+        await client!.unsafe(
+          "DELETE FROM public.feature_flags WHERE ownership_state = 'unresolved_legacy'",
+        );
+        await unvalidateOwnershipCheck(client!);
+      },
+    ],
+  ])(
+    'refuses DROP/CREATE for a real exact INVALID/not-ready/live index with %s',
+    async (_label, unsettle) => {
+      await failCompactBuild(client!);
+      await unsettle();
+      const statements: string[] = [];
+      await expect(
+        runR4aCompactIndexExecutor(runner(client!, statements), [
+          'feature_flags',
+        ]),
+      ).rejects.toThrow('blocked-by-disposition');
+      expect(statements.filter(isIndexDdl)).toEqual([]);
+      expect(
+        await indexState(client!, 'uq_feature_flags_key_organization_compact'),
+      ).toMatchObject({ valid: false, ready: false, live: true });
+    },
+  );
+
+  it('bounds a lock-blocked preflight, refuses DDL, restores the session and releases the lock', async () => {
+    const blocker = await openClient();
+    const verifier = await openClient();
+    await client!.unsafe("SET lock_timeout = '45s'");
+    try {
+      await blocker.unsafe('BEGIN');
+      await blocker.unsafe(
+        'LOCK TABLE public.feature_flags IN ACCESS EXCLUSIVE MODE',
+      );
+      const statements: string[] = [];
+      const started = Date.now();
+      await expect(
+        runR4aCompactIndexExecutor(runner(client!, statements), [
+          'feature_flags',
+        ]),
+      ).rejects.toThrow('blocked-by-schema-drift');
+      // Each queued preflight statement waits at most the executor's 3s
+      // policy; the session's own 45s would exceed this bound on the first.
+      expect(Date.now() - started).toBeLessThan(30_000);
+      expect(statements.filter(isIndexDdl)).toEqual([]);
+      await expect(sessionTimeouts(client!)).resolves.toEqual({
+        lock_timeout: '45s',
+        statement_timeout: '0',
+      });
+      const lock = await verifier.unsafe<{ ok: boolean }[]>(
+        `SELECT pg_try_advisory_lock(${R4A_COMPACT_INDEX_LOCK.namespace}, ${R4A_COMPACT_INDEX_LOCK.id}) AS ok`,
+      );
+      expect(lock[0]?.ok).toBe(true);
+      await verifier.unsafe(
+        `SELECT pg_advisory_unlock(${R4A_COMPACT_INDEX_LOCK.namespace}, ${R4A_COMPACT_INDEX_LOCK.id})`,
+      );
+    } finally {
+      await blocker.unsafe('ROLLBACK');
+      await blocker.end({ timeout: 5 });
+      await verifier.end({ timeout: 5 });
+    }
   });
 
   it('refuses recovery for a real exact INVALID but ready index', async () => {
+    // Settled rows keep the ownership gate ready, so the refusal below is
+    // recoveryAllowed()'s ready=true guard and not the disposition gate.
     await client!.unsafe(
-      "INSERT INTO public.feature_flags (key, tenant_id, ownership_state) SELECT 'r4a-ready-' || value, 'tenant-' || value, 'unresolved_legacy' FROM generate_series(1, 500000) AS value",
+      "INSERT INTO public.feature_flags (key, tenant_id, ownership_state) SELECT 'r4a-ready-' || value, 'tenant-' || value, 'intentional_global' FROM generate_series(1, 500000) AS value",
     );
     const builder = await openClient();
     const observer = await openClient();

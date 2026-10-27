@@ -353,6 +353,55 @@ function dispositionReady(
   );
 }
 
+function healthy(index: R4aCatalogIndexEvidence): boolean {
+  return index.valid === true && index.ready === true && index.live === true;
+}
+function retainedIndexesIntact(
+  required: readonly R4aCatalogIndexEvidence[],
+): boolean {
+  return required.every((index) => index.exact && healthy(index));
+}
+type R4aCompactIndexVerdict = Pick<
+  R4aCompactIndexInspection,
+  'decision' | 'reasons'
+>;
+function classify(
+  target: R4aCatalogIndexEvidence,
+  required: readonly R4aCatalogIndexEvidence[],
+  ownership: OwnershipDispositionTableEvidence | null,
+): R4aCompactIndexVerdict {
+  if (!retainedIndexesIntact(required))
+    return {
+      decision: 'blocked-by-schema-drift',
+      reasons: ['legacy-or-semantic-index-not-intact'],
+    };
+  if (target.exists && !target.exact)
+    return {
+      decision: 'blocked-by-schema-drift',
+      reasons: ['compact-index-wrong-identity-or-definition'],
+    };
+  // The ownership gate precedes every DDL-permitting verdict, including
+  // INVALID recovery: an unsettled table must never reach DROP/CREATE.
+  if (!ownership || !dispositionReady(ownership))
+    return {
+      decision: 'blocked-by-disposition',
+      reasons: ['table-specific-ownership-disposition-not-ready'],
+    };
+  if (target.exists && !healthy(target))
+    return {
+      decision: 'invalid-index-recovery-required',
+      reasons: ['exact-identity-index-not-valid-ready-and-live'],
+    };
+  return target.exists
+    ? {
+        decision: 'already-converged',
+        reasons: ['exact-compact-index-valid-ready-and-live'],
+      }
+    : {
+        decision: 'eligible-to-create',
+        reasons: ['table-specific-disposition-ready-and-schema-intact'],
+      };
+}
 function decideR4aCompactIndexInspection(
   spec: TableIndexSpec,
   target: R4aCatalogIndexEvidence,
@@ -360,79 +409,19 @@ function decideR4aCompactIndexInspection(
   ownership: OwnershipDispositionTableEvidence | null,
   catalogAvailable: boolean,
 ): R4aCompactIndexInspection {
-  if (!catalogAvailable)
-    return {
-      spec,
-      target,
-      requiredLegacyAndSemanticIndexes: required,
-      ownership,
-      catalogAvailable: false,
-      decision: 'blocked-by-schema-drift',
-      reasons: ['catalog-or-ownership-evidence-unavailable'],
-    };
-
-  const requiredIntact = required.every(
-    (index) =>
-      index.exact &&
-      index.valid === true &&
-      index.ready === true &&
-      index.live === true,
-  );
-  if (!requiredIntact)
-    return {
-      spec,
-      target,
-      requiredLegacyAndSemanticIndexes: required,
-      ownership,
-      catalogAvailable: true,
-      decision: 'blocked-by-schema-drift',
-      reasons: ['legacy-or-semantic-index-not-intact'],
-    };
-  if (target.exists && !target.exact)
-    return {
-      spec,
-      target,
-      requiredLegacyAndSemanticIndexes: required,
-      ownership,
-      catalogAvailable: true,
-      decision: 'blocked-by-schema-drift',
-      reasons: ['compact-index-wrong-identity-or-definition'],
-    };
-  if (
-    target.exists &&
-    (target.valid !== true || target.ready !== true || target.live !== true)
-  )
-    return {
-      spec,
-      target,
-      requiredLegacyAndSemanticIndexes: required,
-      ownership,
-      catalogAvailable: true,
-      decision: 'invalid-index-recovery-required',
-      reasons: ['exact-identity-index-not-valid-ready-and-live'],
-    };
-  if (!ownership || !dispositionReady(ownership))
-    return {
-      spec,
-      target,
-      requiredLegacyAndSemanticIndexes: required,
-      ownership,
-      catalogAvailable: true,
-      decision: 'blocked-by-disposition',
-      reasons: ['table-specific-ownership-disposition-not-ready'],
-    };
+  const verdict: R4aCompactIndexVerdict = catalogAvailable
+    ? classify(target, required, ownership)
+    : {
+        decision: 'blocked-by-schema-drift',
+        reasons: ['catalog-or-ownership-evidence-unavailable'],
+      };
   return {
     spec,
     target,
     requiredLegacyAndSemanticIndexes: required,
     ownership,
-    catalogAvailable: true,
-    decision: target.exists ? 'already-converged' : 'eligible-to-create',
-    reasons: [
-      target.exists
-        ? 'exact-compact-index-valid-ready-and-live'
-        : 'table-specific-disposition-ready-and-schema-intact',
-    ],
+    catalogAvailable,
+    ...verdict,
   };
 }
 /** SELECT-only. Never reads audit_events, opens a connection, or mutates schema/data. */

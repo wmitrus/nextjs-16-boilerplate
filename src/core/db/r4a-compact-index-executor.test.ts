@@ -66,6 +66,8 @@ function runner(
     lock?: boolean;
     fail?: string;
     settings?: Record<string, unknown>;
+    /** Successive answers of the session-lock check; true once exhausted. */
+    held?: boolean[];
   } = {},
 ): R4aCompactIndexExecutorRunner & {
   sql: string[];
@@ -92,6 +94,8 @@ function runner(
         throw new Error('db failure');
       if (statement.includes('pg_try_advisory_lock'))
         return [{ ok: options.lock ?? true }] as T[];
+      if (statement.includes('FROM pg_locks'))
+        return [{ held: options.held?.shift() ?? true }] as T[];
       if (statement.includes("current_setting('lock_timeout')"))
         return [
           options.settings ?? {
@@ -311,6 +315,58 @@ describe('r4a compact-index executor', () => {
         runR4aCompactIndexExecutor(db, ['feature_flags']),
       ).rejects.toThrow('db failure');
       expect(db.sql.at(-1)).toContain('pg_advisory_unlock');
+    });
+  });
+
+  describe('session pinning', () => {
+    const lost = 'no longer holds the advisory lock';
+
+    it('checks the session lock before the preflight and before CREATE', async () => {
+      inspect
+        .mockResolvedValueOnce(inspection('eligible-to-create'))
+        .mockResolvedValueOnce(inspection('already-converged'));
+      const db = runner();
+      await runR4aCompactIndexExecutor(db, ['feature_flags']);
+      const create = firstIndex(db.sql, 'CREATE UNIQUE INDEX');
+      expect(db.sql[create - 1]).toContain('FROM pg_locks');
+      expect(db.sql[create - 1]).toContain('pid = pg_backend_pid()');
+    });
+
+    it('refuses CREATE when the session lost its lock after the preflight', async () => {
+      inspect.mockResolvedValue(inspection('eligible-to-create'));
+      const db = runner({ held: [true, false] });
+      await expect(
+        runR4aCompactIndexExecutor(db, ['feature_flags']),
+      ).rejects.toThrow(lost);
+      expect(ddl(db.sql)).toEqual([]);
+      expect(db.sql.slice(-2)).toEqual([
+        RESTORE,
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+    });
+
+    it('refuses the next table when the session changed after the first one', async () => {
+      inspect
+        .mockResolvedValueOnce(inspection('eligible-to-create'))
+        .mockResolvedValueOnce(inspection('already-converged'))
+        .mockResolvedValue(inspection('eligible-to-create'));
+      const db = runner({ held: [true, true, false] });
+      await expect(
+        runR4aCompactIndexExecutor(db, ['feature_flags', 'audit_log_settings']),
+      ).rejects.toThrow(lost);
+      expect(ddl(db.sql)).toHaveLength(1);
+      expect(inspect).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not CREATE after DROP when the session lock is lost in between', async () => {
+      inspect.mockResolvedValue(inspection('invalid-index-recovery-required'));
+      const db = runner({ held: [true, true, false] });
+      await expect(
+        runR4aCompactIndexExecutor(db, ['feature_flags']),
+      ).rejects.toThrow(lost);
+      expect(ddl(db.sql)).toEqual([
+        'DROP INDEX CONCURRENTLY "public"."uq_feature_flags_key_organization_compact"',
+      ]);
     });
   });
 });

@@ -8,9 +8,9 @@ import {
 
 function deps() {
   const end = vi.fn(async () => undefined);
-  const open = vi.fn(() => ({
-    client: { end } as never,
-    runner: { query: vi.fn() } as never,
+  const open = vi.fn(async () => ({
+    runner: { query: vi.fn(), queryWithParams: vi.fn() } as never,
+    close: end,
   }));
   const inspect = vi.fn(async () => ({ decision: 'eligible-to-create' }));
   const execute = vi.fn(async () => []);

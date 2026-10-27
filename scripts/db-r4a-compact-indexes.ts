@@ -10,12 +10,11 @@ import {
 } from '@/core/db/r4a-compact-index-executor';
 import { inspectR4aCompactIndex } from '@/core/db/r4a-compact-index-inspection';
 
-type SqlClient = ReturnType<typeof postgres>;
 export interface R4aCliDeps {
-  open(url: string): {
-    client: SqlClient;
+  open(url: string): Promise<{
     runner: R4aCompactIndexExecutorRunner;
-  };
+    close(): Promise<void>;
+  }>;
   inspect: typeof inspectR4aCompactIndex;
   execute: typeof runR4aCompactIndexExecutor;
   log(value: unknown): void;
@@ -29,14 +28,31 @@ export function redactR4aCliError(error: unknown): string {
 
 function defaults(): R4aCliDeps {
   return {
-    open: (url) => {
+    open: async (url) => {
       const client = postgres(url, {
         prepare: false,
         max: 1,
         idle_timeout: 5,
         connect_timeout: 10,
+        // Never retire the connection mid-run: the executor's advisory lock
+        // and timeout policy live on this one session.
+        max_lifetime: null,
       });
-      return { client, runner: r4aExecutorRunnerFromPostgres(client) };
+      let session: postgres.ReservedSql;
+      try {
+        // Pin one physical connection for the whole run.
+        session = await client.reserve();
+      } catch (error) {
+        await client.end({ timeout: 5 });
+        throw error;
+      }
+      return {
+        runner: r4aExecutorRunnerFromPostgres(session),
+        close: async () => {
+          session.release();
+          await client.end({ timeout: 5 });
+        },
+      };
     },
     inspect: inspectR4aCompactIndex,
     execute: runR4aCompactIndexExecutor,
@@ -59,7 +75,7 @@ export async function runR4aCompactIndexesCli(
   if (!url) throw new Error('DATABASE_URL_UNPOOLED is required');
   assertNoKnownPoolerMarker(url, 'R4a compact-index executor');
   const parsed = new URL(url);
-  const { client, runner } = deps.open(url);
+  const { runner, close } = await deps.open(url);
   try {
     if (check) {
       const evidence = await Promise.all(
@@ -83,7 +99,7 @@ export async function runR4aCompactIndexesCli(
       });
     }
   } finally {
-    await client.end({ timeout: 5 });
+    await close();
   }
 }
 

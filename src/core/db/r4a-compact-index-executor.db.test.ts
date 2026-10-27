@@ -501,6 +501,84 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
     }
   });
 
+  it('pins its session: a reserved connection outlives the driver lifetime that retires a plain one', async () => {
+    const { default: postgres } = await import('postgres');
+    const pid = async (sql: Sql) =>
+      (
+        await sql.unsafe<{ pid: number }[]>('SELECT pg_backend_pid() AS pid')
+      )[0]!.pid;
+    // max_lifetime is in seconds; a 1s lifetime expires during the sleep.
+    const plain = postgres(testUrl!, {
+      max: 1,
+      prepare: false,
+      max_lifetime: 1,
+    });
+    const pooled = postgres(testUrl!, {
+      max: 1,
+      prepare: false,
+      max_lifetime: 1,
+    });
+    try {
+      const plainBefore = await pid(plain);
+      await plain.unsafe('SELECT pg_sleep(1.5)');
+      expect(await pid(plain)).not.toBe(plainBefore);
+
+      const session = await pooled.reserve();
+      try {
+        const pinnedBefore = await pid(session);
+        await session.unsafe('SELECT pg_sleep(1.5)');
+        expect(await pid(session)).toBe(pinnedBefore);
+      } finally {
+        session.release();
+      }
+    } finally {
+      // A lifetime-expired connection otherwise waits out the end timeout.
+      await plain.end({ timeout: 0 });
+      await pooled.end({ timeout: 0 });
+    }
+  });
+
+  it('refuses DDL on a session that no longer holds its advisory lock', async () => {
+    const other = await openClient();
+    const statements: string[] = [];
+    let switched = false;
+    const original = runner(client!, statements);
+    const replacement = runner(other, statements);
+    // Simulates the driver retiring the connection after the first build.
+    const switching: R4aCompactIndexExecutorRunner = {
+      query: async <T>(statement: string) => {
+        const rows = await (switched ? replacement : original).query<T>(
+          statement,
+        );
+        if (statement.startsWith('CREATE UNIQUE INDEX')) switched = true;
+        return rows;
+      },
+      queryWithParams: (statement, values) =>
+        (switched ? replacement : original).queryWithParams(statement, values),
+    };
+    try {
+      await expect(
+        runR4aCompactIndexExecutor(switching, [
+          'feature_flags',
+          'audit_log_settings',
+        ]),
+      ).rejects.toThrow('no longer holds the advisory lock');
+      expect(statements.filter(isIndexDdl)).toHaveLength(1);
+      expect(
+        await indexState(
+          client!,
+          'uq_audit_log_settings_category_organization_compact',
+        ),
+      ).toBeUndefined();
+    } finally {
+      // The original session still holds the lock; release it for later tests.
+      await client!.unsafe(
+        `SELECT pg_advisory_unlock(${R4A_COMPACT_INDEX_LOCK.namespace}, ${R4A_COMPACT_INDEX_LOCK.id})`,
+      );
+      await other.end({ timeout: 5 });
+    }
+  });
+
   it('refuses a public pg_class name collision that is not an index', async () => {
     await client!.unsafe(
       'CREATE VIEW public.uq_feature_flags_key_organization_compact AS SELECT 1 AS value',

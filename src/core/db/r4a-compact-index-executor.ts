@@ -79,6 +79,28 @@ async function acquire(runner: R4aCompactIndexSqlRunner): Promise<void> {
   );
   if (rows[0]?.ok !== true) throw new R4aCompactIndexAlreadyRunningError();
 }
+/**
+ * The advisory lock is session-scoped, so holding it proves the runner is
+ * still on the session that acquired it -- and that carries the timeout
+ * policy. If the driver retired or reconnected the connection, this fails and
+ * no further DDL runs.
+ */
+async function assertLockHeld(runner: R4aCompactIndexSqlRunner): Promise<void> {
+  const rows = await runner.query<{ held: unknown }>(
+    `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted AND pid = pg_backend_pid() AND classid = ${R4A_COMPACT_INDEX_LOCK.namespace} AND objid = ${R4A_COMPACT_INDEX_LOCK.id} AND objsubid = 2) AS held`,
+  );
+  if (rows[0]?.held !== true)
+    throw new R4aCompactIndexExecutorError(
+      'the session no longer holds the advisory lock; refusing DDL',
+    );
+}
+async function runDdl(
+  runner: R4aCompactIndexSqlRunner,
+  statement: string,
+): Promise<void> {
+  await assertLockHeld(runner);
+  await runner.query(statement);
+}
 async function release(runner: R4aCompactIndexSqlRunner): Promise<void> {
   await runner.query(
     `SELECT pg_advisory_unlock(${R4A_COMPACT_INDEX_LOCK.namespace}, ${R4A_COMPACT_INDEX_LOCK.id})`,
@@ -176,17 +198,19 @@ async function converge(
 ): Promise<readonly R4aCompactIndexExecution[]> {
   const results: R4aCompactIndexExecution[] = [];
   for (const table of tables) {
+    await assertLockHeld(runner);
     const before = await inspectR4aCompactIndex(runner, table);
     let action: R4aCompactIndexExecution['action'];
     if (before.decision === 'already-converged') action = 'no-op';
     else if (before.decision === 'eligible-to-create') {
-      await runner.query(createSql(table));
+      await runDdl(runner, createSql(table));
       action = 'created';
     } else if (recoveryAllowed(before)) {
-      await runner.query(
+      await runDdl(
+        runner,
         `DROP INDEX CONCURRENTLY "public"."${specFor(table).index}"`,
       );
-      await runner.query(createSql(table));
+      await runDdl(runner, createSql(table));
       action = 'recreated-invalid';
     } else
       throw new R4aCompactIndexExecutorError(

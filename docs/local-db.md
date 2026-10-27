@@ -13,29 +13,30 @@ It also explains which local database profile each command family targets.
 
 ## Canonical `package.json` DB script map
 
-| Script                       | Target                        | Purpose                                                                               |
-| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------- |
-| `pnpm db:generate`           | Dev schema config             | Generate migration files from the current schema                                      |
-| `pnpm db:export:sql`         | Dev schema config             | Export the current schema to `exports/sql/schema.sql`                                 |
-| `pnpm db:pglite:migrate`     | Local PGlite                  | Apply migrations                                                                      |
-| `pnpm db:pglite:seed`        | Local PGlite                  | Seed canonical local data                                                             |
-| `pnpm db:pglite:studio`      | Local PGlite                  | Open Drizzle Studio                                                                   |
-| `pnpm db:pglite:reset`       | Local PGlite                  | Wipe, migrate, and seed                                                               |
-| `pnpm db:dev:up`             | Local dev Postgres container  | Start the dev container                                                               |
-| `pnpm db:dev:down`           | Local dev Postgres container  | Stop the dev container                                                                |
-| `pnpm db:dev:migrate`        | Local dev Postgres container  | Apply migrations                                                                      |
-| `pnpm db:dev:seed`           | Local dev Postgres container  | Seed canonical local data                                                             |
-| `pnpm db:dev:studio`         | Local dev Postgres container  | Open Drizzle Studio                                                                   |
-| `pnpm db:dev:reset`          | Local dev Postgres container  | Wipe, migrate, and seed                                                               |
-| `pnpm db:test:up`            | Local test Postgres container | Start the test container                                                              |
-| `pnpm db:test:down`          | Local test Postgres container | Stop the test container                                                               |
-| `pnpm db:test:migrate`       | Local test Postgres container | Apply migrations                                                                      |
-| `pnpm db:test:seed`          | Local test Postgres container | Seed canonical test data                                                              |
-| `pnpm db:test:studio`        | Local test Postgres container | Open Drizzle Studio                                                                   |
-| `pnpm db:test:reset`         | Local test Postgres container | Wipe, migrate, and seed                                                               |
-| `pnpm db:all:down`           | Local compose stack           | Stop all local DB containers                                                          |
-| `pnpm db:migrate:prod`       | Production-style Postgres     | Apply migrations using `DATABASE_URL_UNPOOLED` (required; no `DATABASE_URL` fallback) |
-| `pnpm db:migrate:prod:local` | Production-style Postgres     | Apply prod migrations locally with `.env.production`                                  |
+| Script                        | Target                        | Purpose                                                                               |
+| ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------- |
+| `pnpm db:generate`            | Dev schema config             | Generate migration files from the current schema                                      |
+| `pnpm db:export:sql`          | Dev schema config             | Export the current schema to `exports/sql/schema.sql`                                 |
+| `pnpm db:pglite:migrate`      | Local PGlite                  | Apply migrations                                                                      |
+| `pnpm db:pglite:seed`         | Local PGlite                  | Seed canonical local data                                                             |
+| `pnpm db:pglite:studio`       | Local PGlite                  | Open Drizzle Studio                                                                   |
+| `pnpm db:pglite:reset`        | Local PGlite                  | Wipe, migrate, and seed                                                               |
+| `pnpm db:dev:up`              | Local dev Postgres container  | Start the dev container                                                               |
+| `pnpm db:dev:down`            | Local dev Postgres container  | Stop the dev container                                                                |
+| `pnpm db:dev:migrate`         | Local dev Postgres container  | Apply migrations                                                                      |
+| `pnpm db:dev:seed`            | Local dev Postgres container  | Seed canonical local data                                                             |
+| `pnpm db:dev:studio`          | Local dev Postgres container  | Open Drizzle Studio                                                                   |
+| `pnpm db:dev:reset`           | Local dev Postgres container  | Wipe, migrate, and seed                                                               |
+| `pnpm db:test:up`             | Local test Postgres container | Start the test container                                                              |
+| `pnpm db:test:down`           | Local test Postgres container | Stop the test container                                                               |
+| `pnpm db:test:migrate`        | Local test Postgres container | Apply migrations                                                                      |
+| `pnpm db:test:seed`           | Local test Postgres container | Seed canonical test data                                                              |
+| `pnpm db:test:studio`         | Local test Postgres container | Open Drizzle Studio                                                                   |
+| `pnpm db:test:reset`          | Local test Postgres container | Wipe, migrate, and seed                                                               |
+| `pnpm db:all:down`            | Local compose stack           | Stop all local DB containers                                                          |
+| `pnpm db:migrate:prod`        | Production-style Postgres     | Apply migrations using `DATABASE_URL_UNPOOLED` (required; no `DATABASE_URL` fallback) |
+| `pnpm db:migrate:prod:local`  | Production-style Postgres     | Apply prod migrations locally with `.env.production`                                  |
+| `pnpm db:r4a:compact-indexes` | Production-style Postgres     | Operator-gated R4a compact-index inspection/execution; never automatic                |
 
 All removed shorthand aliases stay removed. Use the explicit target-specific families above.
 
@@ -145,6 +146,42 @@ The guarded destructive local Postgres flows verify the target URL before openin
 - `reset` in the guarded flows requires typing `yes` interactively, or pass `--force` for automation
 
 If you run the wrong script against the wrong database, you will see a clear error with a hint pointing to the correct command.
+
+---
+
+## R4a compact unique indexes (operator-only)
+
+The R4a compact indexes are intentionally managed outside Drizzle migrations:
+`uq_feature_flags_key_organization_compact` on `(key, organization_id)` and
+`uq_audit_log_settings_category_organization_compact` on
+`(category, organization_id)`, both `UNIQUE NULLS NOT DISTINCT`.
+
+They are absent from the Drizzle schema and snapshots on purpose. Therefore,
+`pnpm db:generate` must not generate or be used to create either index. The
+standard migration/deployment paths never import or invoke this executor.
+
+1. Set only the direct `DATABASE_URL_UNPOOLED` operator target; known pooler
+   URLs are rejected, and `DATABASE_URL` is never a fallback.
+2. Run `pnpm db:r4a:compact-indexes --check`. It performs only catalog and
+   disposition reads; retain its evidence for the change record.
+3. Proceed only when each target reports `eligible-to-create` or
+   `already-converged`. Apply explicitly with
+   `pnpm db:r4a:compact-indexes --apply --production-approved`.
+4. The executor takes a session advisory lock, re-runs its preflight while
+   holding that lock, then uses `CREATE UNIQUE INDEX CONCURRENTLY` outside a
+   transaction. It keeps legacy/partial indexes and `tenant_id` unchanged.
+
+If an exact index is `INVALID`, `not-ready`, and live, the executor can drop
+and recreate only that fully verified relation. Any wrong definition, name
+collision, incomplete catalog evidence, `INVALID + ready`, or disposition
+failure is a no-go: investigate manually and do not use name-only `DROP`.
+
+Rollback to older application code needs no index removal: the two indexes are
+additive and legacy uniqueness remains in place. If an operational rollback
+must remove an R4a index, take fresh `--check` evidence, verify its complete
+identity in `pg_catalog`, then have an approved operator issue a targeted
+`DROP INDEX CONCURRENTLY` outside a transaction. This executor deliberately
+does not implement ordinary rollback deletion.
 
 ---
 

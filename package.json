@@ -117,6 +117,7 @@
     "db:migrate:prod:local": "node --env-file=.env.production --import tsx scripts/db-migrate-prod.ts",
     "db:aud-a:converge": "tsx scripts/db-aud-a-converge.ts",
     "db:aud-a:converge:local": "node --env-file=.env.production --import tsx scripts/db-aud-a-converge.ts",
+    "db:r4a:compact-indexes": "tsx scripts/db-r4a-compact-indexes.ts",
     "db:s7:cutover": "tsx scripts/db-s7-cutover.ts",
     "db:s7:cutover:local": "node --env-file=.env.production --import tsx scripts/db-s7-cutover.ts",
     "db:export:sql": "mkdir -p exports/sql && drizzle-kit export --config=src/core/db/migrations/config/drizzle.dev.ts > exports/sql/schema.sql",

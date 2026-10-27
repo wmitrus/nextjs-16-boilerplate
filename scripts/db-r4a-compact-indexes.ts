@@ -2,17 +2,20 @@ import './load-env';
 
 import postgres from 'postgres';
 
+import { assertNoKnownPoolerMarker } from '@/core/db/post-migrate-steps';
 import {
-  assertNoKnownPoolerMarker,
-  sqlRunnerFromPostgres,
-  type SqlRunner,
-} from '@/core/db/post-migrate-steps';
-import { runR4aCompactIndexExecutor } from '@/core/db/r4a-compact-index-executor';
+  r4aExecutorRunnerFromPostgres,
+  runR4aCompactIndexExecutor,
+  type R4aCompactIndexExecutorRunner,
+} from '@/core/db/r4a-compact-index-executor';
 import { inspectR4aCompactIndex } from '@/core/db/r4a-compact-index-inspection';
 
 type SqlClient = ReturnType<typeof postgres>;
 export interface R4aCliDeps {
-  open(url: string): { client: SqlClient; runner: SqlRunner };
+  open(url: string): {
+    client: SqlClient;
+    runner: R4aCompactIndexExecutorRunner;
+  };
   inspect: typeof inspectR4aCompactIndex;
   execute: typeof runR4aCompactIndexExecutor;
   log(value: unknown): void;
@@ -33,7 +36,7 @@ function defaults(): R4aCliDeps {
         idle_timeout: 5,
         connect_timeout: 10,
       });
-      return { client, runner: sqlRunnerFromPostgres(client) };
+      return { client, runner: r4aExecutorRunnerFromPostgres(client) };
     },
     inspect: inspectR4aCompactIndex,
     execute: runR4aCompactIndexExecutor,

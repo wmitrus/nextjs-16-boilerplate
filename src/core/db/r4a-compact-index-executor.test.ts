@@ -4,11 +4,9 @@ import {
   R4aCompactIndexAlreadyRunningError,
   R4aCompactIndexExecutorError,
   runR4aCompactIndexExecutor,
+  type R4aCompactIndexExecutorRunner,
 } from './r4a-compact-index-executor';
-import type {
-  R4aCompactIndexInspection,
-  R4aCompactIndexSqlRunner,
-} from './r4a-compact-index-inspection';
+import type { R4aCompactIndexInspection } from './r4a-compact-index-inspection';
 
 const { inspect } = vi.hoisted(() => ({ inspect: vi.fn() }));
 vi.mock('./r4a-compact-index-inspection', () => ({
@@ -69,10 +67,25 @@ function runner(
     fail?: string;
     settings?: Record<string, unknown>;
   } = {},
-): R4aCompactIndexSqlRunner & { sql: string[] } {
+): R4aCompactIndexExecutorRunner & {
+  sql: string[];
+  params: (readonly string[])[];
+} {
   const sql: string[] = [];
+  const params: (readonly string[])[] = [];
   return {
     sql,
+    params,
+    queryWithParams: async <T>(
+      statement: string,
+      values: readonly string[],
+    ): Promise<T[]> => {
+      sql.push(statement);
+      params.push(values);
+      if (options.fail && statement.includes(options.fail))
+        throw new Error('db failure');
+      return [] as T[];
+    },
     query: async <T>(statement: string): Promise<T[]> => {
       sql.push(statement);
       if (options.fail && statement.includes(options.fail))
@@ -95,7 +108,7 @@ const ddl = (sql: readonly string[]) =>
 const firstIndex = (sql: readonly string[], fragment: string) =>
   sql.findIndex((statement) => statement.includes(fragment));
 const RESTORE =
-  "SELECT set_config('lock_timeout', '5s''x', false), set_config('statement_timeout', '1min', false)";
+  "SELECT set_config('lock_timeout', $1, false), set_config('statement_timeout', $2, false)";
 
 describe('r4a compact-index executor', () => {
   beforeEach(() => {
@@ -249,6 +262,47 @@ describe('r4a compact-index executor', () => {
         expect(db.sql.at(-1)).toContain('pg_advisory_unlock');
       },
     );
+
+    it.each([
+      ['ordinary values', '5s', '1min'],
+      ['apostrophes', "5s'x", "1min''"],
+      [
+        'an injection attempt',
+        "0'; DROP TABLE public.feature_flags; --",
+        '$1 \' \\ " ; SELECT pg_sleep(10)',
+      ],
+    ])(
+      'restores %s through a constant, parameterized statement',
+      async (_label, lockTimeout, statementTimeout) => {
+        inspect.mockResolvedValue(inspection('already-converged'));
+        const db = runner({
+          settings: {
+            lock_timeout: lockTimeout,
+            statement_timeout: statementTimeout,
+          },
+        });
+        await runR4aCompactIndexExecutor(db, ['feature_flags']);
+        expect(db.sql.filter((sql) => sql.includes('set_config'))).toEqual([
+          RESTORE,
+        ]);
+        expect(db.params).toEqual([[lockTimeout, statementTimeout]]);
+        for (const value of [lockTimeout, statementTimeout])
+          expect(db.sql.some((sql) => sql.includes(value))).toBe(false);
+      },
+    );
+
+    it('refuses a runner that cannot bind parameters before any SQL', async () => {
+      const db = runner();
+      const { queryWithParams: _unsupported, ...plain } = db;
+      await expect(
+        runR4aCompactIndexExecutor(
+          plain as unknown as R4aCompactIndexExecutorRunner,
+          ['feature_flags'],
+        ),
+      ).rejects.toThrow('cannot bind query parameters');
+      expect(db.sql).toEqual([]);
+      expect(inspect).not.toHaveBeenCalled();
+    });
 
     it('still releases the lock when restoring the settings fails', async () => {
       inspect.mockResolvedValue(inspection('already-converged'));

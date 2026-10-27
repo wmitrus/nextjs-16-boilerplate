@@ -6,10 +6,11 @@ import {
   R4A_COMPACT_INDEX_LOCK,
   R4aCompactIndexAlreadyRunningError,
   R4aCompactIndexExecutorError,
+  r4aExecutorRunnerFromPostgres,
   runR4aCompactIndexExecutor,
+  type R4aCompactIndexExecutorRunner,
 } from './r4a-compact-index-executor';
 import { inspectR4aCompactIndex } from './r4a-compact-index-inspection';
-import type { R4aCompactIndexSqlRunner } from './r4a-compact-index-inspection';
 
 import {
   startIsolatedPostgres,
@@ -42,11 +43,22 @@ let testUrl: string | undefined;
 function runner(
   connection: Sql,
   statements: string[] = [],
-): R4aCompactIndexSqlRunner {
+  params: (readonly string[])[] = [],
+): R4aCompactIndexExecutorRunner {
+  // Records traffic around the production adapter the CLI uses.
+  const adapter = r4aExecutorRunnerFromPostgres(connection);
   return {
     query: async <T>(statement: string) => {
       statements.push(statement);
-      return (await connection.unsafe(statement)) as T[];
+      return adapter.query<T>(statement);
+    },
+    queryWithParams: async <T>(
+      statement: string,
+      values: readonly string[],
+    ) => {
+      statements.push(statement);
+      params.push(values);
+      return adapter.queryWithParams<T>(statement, values);
     },
   };
 }
@@ -138,6 +150,9 @@ async function sessionTimeouts(connection: Sql) {
   );
   return row;
 }
+
+const RESTORE_TIMEOUTS_SQL =
+  "SELECT set_config('lock_timeout', $1, false), set_config('statement_timeout', $2, false)";
 
 const isIndexDdl = (statement: string) =>
   /^(CREATE UNIQUE INDEX|DROP INDEX)/.test(statement);
@@ -263,8 +278,9 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
     );
     await client!.unsafe("SET lock_timeout = '7s'");
     const statements: string[] = [];
+    const params: (readonly string[])[] = [];
     const result = await runR4aCompactIndexExecutor(
-      runner(client!, statements),
+      runner(client!, statements, params),
       ['feature_flags'],
     );
     expect(result).toMatchObject([
@@ -282,6 +298,11 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
       lock_timeout: '7s',
       statement_timeout: '0',
     });
+    // Restored through bound parameters: constant SQL, values passed apart.
+    expect(statements.filter((s) => s.includes('set_config'))).toEqual([
+      RESTORE_TIMEOUTS_SQL,
+    ]);
+    expect(params).toEqual([['7s', '0']]);
   });
 
   it.each([
@@ -323,9 +344,10 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
         'LOCK TABLE public.feature_flags IN ACCESS EXCLUSIVE MODE',
       );
       const statements: string[] = [];
+      const params: (readonly string[])[] = [];
       const started = Date.now();
       await expect(
-        runR4aCompactIndexExecutor(runner(client!, statements), [
+        runR4aCompactIndexExecutor(runner(client!, statements, params), [
           'feature_flags',
         ]),
       ).rejects.toThrow('blocked-by-schema-drift');
@@ -337,6 +359,8 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
         lock_timeout: '45s',
         statement_timeout: '0',
       });
+      expect(params).toEqual([['45s', '0']]);
+      expect(statements.some((s) => s.includes('45s'))).toBe(false);
       const lock = await verifier.unsafe<{ ok: boolean }[]>(
         `SELECT pg_try_advisory_lock(${R4A_COMPACT_INDEX_LOCK.namespace}, ${R4A_COMPACT_INDEX_LOCK.id}) AS ok`,
       );
@@ -415,7 +439,8 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
     const continueAfterProbe = new Promise<void>((resolve) => {
       continueFirst = resolve;
     });
-    const firstRunner: R4aCompactIndexSqlRunner = {
+    const firstRunner: R4aCompactIndexExecutorRunner = {
+      ...runner(first),
       query: async <T>(statement: string) => {
         const rows = (await first.unsafe(statement)) as T[];
         if (statement.includes('pg_try_advisory_lock')) {

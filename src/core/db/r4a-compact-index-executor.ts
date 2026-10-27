@@ -25,6 +25,35 @@ export class R4aCompactIndexAlreadyRunningError extends R4aCompactIndexExecutorE
     this.name = 'R4aCompactIndexAlreadyRunningError';
   }
 }
+/**
+ * The executor's session runner. Besides plain statements it must bind values
+ * as real driver parameters ($1, $2, ...) -- values are never spliced into SQL
+ * text. A runner without this capability is refused before any SQL runs.
+ */
+export interface R4aCompactIndexExecutorRunner extends R4aCompactIndexSqlRunner {
+  queryWithParams<T>(
+    statement: string,
+    params: readonly string[],
+  ): Promise<T[]>;
+}
+interface PostgresParameterClient {
+  unsafe(text: string, params?: string[]): PromiseLike<unknown>;
+}
+/**
+ * Adapts one postgres.js session (`max: 1`). With parameters, postgres.js
+ * uses the extended protocol: the text goes in Parse, the values in Bind.
+ */
+export function r4aExecutorRunnerFromPostgres(
+  client: PostgresParameterClient,
+): R4aCompactIndexExecutorRunner {
+  return {
+    query: async <T>(text: string) => (await client.unsafe(text)) as T[],
+    queryWithParams: async <T>(text: string, params: readonly string[]) =>
+      (await client.unsafe(text, [...params])) as T[],
+  };
+}
+const RESTORE_TIMEOUTS_SQL =
+  "SELECT set_config('lock_timeout', $1, false), set_config('statement_timeout', $2, false)";
 export interface R4aCompactIndexExecution {
   readonly table: R4aCompactIndexTable;
   readonly action: 'created' | 'recreated-invalid' | 'no-op';
@@ -59,9 +88,6 @@ interface SessionTimeouts {
   readonly lockTimeout: string;
   readonly statementTimeout: string;
 }
-function settingLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
 /**
  * Captures the session's own timeouts, then applies the executor policy to
  * every statement that follows -- preflight, recovery, CREATE and postflight.
@@ -94,12 +120,13 @@ async function applyTimeouts(runner: R4aCompactIndexSqlRunner): Promise<void> {
   );
 }
 async function restoreTimeouts(
-  runner: R4aCompactIndexSqlRunner,
+  runner: R4aCompactIndexExecutorRunner,
   previous: SessionTimeouts,
 ): Promise<void> {
-  await runner.query(
-    `SELECT set_config('lock_timeout', ${settingLiteral(previous.lockTimeout)}, false), set_config('statement_timeout', ${settingLiteral(previous.statementTimeout)}, false)`,
-  );
+  await runner.queryWithParams(RESTORE_TIMEOUTS_SQL, [
+    previous.lockTimeout,
+    previous.statementTimeout,
+  ]);
 }
 function recoveryAllowed(inspection: R4aCompactIndexInspection): boolean {
   const target = inspection.target;
@@ -115,12 +142,19 @@ function recoveryAllowed(inspection: R4aCompactIndexInspection): boolean {
 
 /** Mutating only when the caller has explicitly entered this function. */
 export async function runR4aCompactIndexExecutor(
-  runner: R4aCompactIndexSqlRunner,
+  runner: R4aCompactIndexExecutorRunner,
   tables: readonly R4aCompactIndexTable[] = [
     'feature_flags',
     'audit_log_settings',
   ],
 ): Promise<readonly R4aCompactIndexExecution[]> {
+  if (
+    typeof (runner as Partial<R4aCompactIndexExecutorRunner>)
+      .queryWithParams !== 'function'
+  )
+    throw new R4aCompactIndexExecutorError(
+      'runner cannot bind query parameters; refusing to run',
+    );
   await acquire(runner);
   let previous: SessionTimeouts | undefined;
   try {

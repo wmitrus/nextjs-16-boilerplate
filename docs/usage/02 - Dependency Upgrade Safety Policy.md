@@ -76,6 +76,17 @@ Treat as one compatibility group:
 
 Rule: align runtime first, then update `@types/node`, then verify typecheck + tests.
 
+### Storybook ecosystem
+
+Treat `storybook`, all `@storybook/*` packages, and `eslint-plugin-storybook`
+as one compatibility group.
+
+Rule: upgrade Storybook **only** through its built-in CLI
+(`pnpm dlx storybook@<version> upgrade`), never by hand-editing versions in
+`package.json` or via `pnpm update`/`pnpm add`. The CLI keeps the package set
+aligned and runs its automigrations. Afterwards, regenerate any
+`patchedDependencies` entry for `@storybook/*` against the new version.
+
 ## Rollback procedure (required)
 
 If a batch fails:

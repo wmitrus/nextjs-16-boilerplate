@@ -160,21 +160,68 @@ They are absent from the Drizzle schema and snapshots on purpose. Therefore,
 `pnpm db:generate` must not generate or be used to create either index. The
 standard migration/deployment paths never import or invoke this executor.
 
+### Decisions reported by `--check`
+
+| Decision                          | Meaning                                                                                       | Operator action                                    |
+| --------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `eligible-to-create`              | Gate ready, retained indexes intact, compact index absent                                     | Standard `--apply` allowed                         |
+| `already-converged`               | Exact compact index exists and is valid, ready and live                                       | Standard `--apply` allowed (no-op)                 |
+| `invalid-index-recovery-required` | Exact compact index exists but is not valid, ready and live; gate ready                       | STOP — exceptional recovery procedure only (below) |
+| `blocked-by-disposition`          | Table-specific ownership disposition gate is not ready                                        | STOP — no DDL                                      |
+| `blocked-by-schema-drift`         | Wrong identity/definition, name collision, broken retained index, or missing catalog evidence | STOP — no DDL; investigate manually                |
+
+### Standard apply
+
 1. Set only the direct `DATABASE_URL_UNPOOLED` operator target; known pooler
    URLs are rejected, and `DATABASE_URL` is never a fallback.
 2. Run `pnpm db:r4a:compact-indexes --check`. It performs only catalog and
    disposition reads; retain its evidence for the change record.
-3. Proceed only when each target reports `eligible-to-create` or
-   `already-converged`. Apply explicitly with
+3. Proceed only when **every** target reports `eligible-to-create` or
+   `already-converged`. Any other decision is a STOP for the standard path.
+4. Apply explicitly with
    `pnpm db:r4a:compact-indexes --apply --production-approved`.
-4. The executor takes a session advisory lock, re-runs its preflight while
-   holding that lock, then uses `CREATE UNIQUE INDEX CONCURRENTLY` outside a
-   transaction. It keeps legacy/partial indexes and `tenant_id` unchanged.
+5. The executor takes a session advisory lock, applies its own timeout policy,
+   re-runs the full inspection and gate checks while holding that lock, then
+   uses `CREATE UNIQUE INDEX CONCURRENTLY` outside a transaction. After any DDL
+   it re-inspects and fails unless the index is `already-converged`. It keeps
+   legacy/partial indexes and `tenant_id` unchanged.
 
-If an exact index is `INVALID`, `not-ready`, and live, the executor can drop
-and recreate only that fully verified relation. Any wrong definition, name
-collision, incomplete catalog evidence, `INVALID + ready`, or disposition
-failure is a no-go: investigate manually and do not use name-only `DROP`.
+A `--check` result is evidence, not a standing authorization. `--apply
+--production-approved` never trusts an earlier `--check`: it re-inspects and
+re-evaluates every condition at execution time and acts only on that fresh
+result. The database can change between the two runs, so take `--check`
+immediately before `--apply` and re-run it if anything may have changed.
+
+The CLI has a single `--apply` mode. If the state at execution time has become
+`invalid-index-recovery-required` and qualifies (see below), the executor
+performs the recovery `DROP`/`CREATE` in that same run. The standard path
+therefore relies on step 3: never run `--apply` unless the fresh `--check`
+shows only `eligible-to-create` / `already-converged`.
+
+### Exceptional INVALID-index recovery
+
+`invalid-index-recovery-required` is never part of the standard path. It needs
+a separate, recorded operator decision based on fresh `--check` evidence for
+the affected table showing **all** of:
+
+- exact index identity: name, `public` schema and table, unique btree, the
+  expected key columns/opclasses/collations, `NULLS NOT DISTINCT`, no
+  predicate, no `INCLUDE` columns, matching `pg_get_indexdef`;
+- index state `INVALID` (`indisvalid = false`), not ready
+  (`indisready = false`) and live (`indislive = true`);
+- every retained legacy and semantic index intact (exact, valid, ready, live);
+- the table-specific ownership disposition gate ready (no unresolved or
+  quarantined rows, no invalid combinations, ownership `CHECK` exact and
+  validated).
+
+With that decision recorded, run the same
+`pnpm db:r4a:compact-indexes --apply --production-approved`. Under its lock the
+executor re-checks these conditions and drops and recreates only that fully
+verified relation; it refuses if any condition no longer holds.
+
+STOP — no DDL — for any other state, including an `INVALID` but ready index,
+a wrong definition, a name collision, incomplete catalog evidence, or a
+disposition failure. Investigate manually and never use a name-only `DROP`.
 
 Rollback to older application code needs no index removal: the two indexes are
 additive and legacy uniqueness remains in place. If an operational rollback

@@ -1,3 +1,10 @@
+## [2.24.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.24.0...v2.24.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **deps:** remediate pnpm audit advisories ([18af741](https://github.com/wmitrus/nextjs-16-boilerplate/commit/18af741aa6a36a01571e3dfd47c6d67e0f8cd040))
+
 # [2.24.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.23.0...v2.24.0) (2026-10-16)
 
 

@@ -3,7 +3,7 @@ import type { TestProject } from 'vitest/node';
 import {
   startIsolatedPostgres,
   type IsolatedPostgres,
-} from './isolated-postgres';
+} from '../../src/testing/db/isolated-postgres';
 
 let database: IsolatedPostgres;
 

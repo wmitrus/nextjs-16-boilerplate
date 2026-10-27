@@ -3,11 +3,6 @@ import type { Sql } from 'postgres';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
-  startIsolatedPostgres,
-  type IsolatedPostgres,
-} from '../../../tests/db/isolated-postgres';
-
-import {
   R4A_COMPACT_INDEX_LOCK,
   R4aCompactIndexAlreadyRunningError,
   R4aCompactIndexExecutorError,
@@ -15,6 +10,11 @@ import {
 } from './r4a-compact-index-executor';
 import { inspectR4aCompactIndex } from './r4a-compact-index-inspection';
 import type { R4aCompactIndexSqlRunner } from './r4a-compact-index-inspection';
+
+import {
+  startIsolatedPostgres,
+  type IsolatedPostgres,
+} from '@/testing/db/isolated-postgres';
 
 /**
  * CREATE/DROP INDEX CONCURRENTLY and VALIDATE CONSTRAINT cannot share the DB

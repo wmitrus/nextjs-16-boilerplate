@@ -2,8 +2,8 @@ import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import { runMigrations } from '../../src/core/db/migrations/run-migrations';
-import type { DrizzleDb } from '../../src/core/db/types';
+import { runMigrations } from '@/core/db/migrations/run-migrations';
+import type { DrizzleDb } from '@/core/db/types';
 
 export interface IsolatedPostgres {
   readonly url: string;

@@ -1,3 +1,18 @@
+# [2.25.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.24.1...v2.25.0) (2026-10-27)
+
+
+### Bug Fixes
+
+* **db:** enforce R4a recovery gates and session timeouts ([2e531df](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2e531df827646263825c1ab508cc9456a464aefe))
+* **db:** parameterize R4a session timeout restoration ([5478613](https://github.com/wmitrus/nextjs-16-boilerplate/commit/547861359ad885bcd9e0e16a49de69e754e1538e))
+* **db:** pin the R4a executor session for the whole run ([0a606e0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0a606e02935065f254491cdfe9c502d0b824263b))
+* **test:** move isolated-postgres helper into src/testing ([b73b63a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b73b63a73aaf2523f9258497aa99bc825895d14b))
+
+
+### Features
+
+* **db:** add guarded R4a compact index convergence ([712d031](https://github.com/wmitrus/nextjs-16-boilerplate/commit/712d031b36a60465931954abf45add3f2bf474b3))
+
 ## [2.24.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.24.0...v2.24.1) (2026-10-27)
 
 

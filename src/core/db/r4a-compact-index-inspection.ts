@@ -352,28 +352,15 @@ function dispositionReady(
     evidence.constraint.state === 'exact-validated'
   );
 }
-/** SELECT-only. Never reads audit_events, opens a connection, or mutates schema/data. */
-export async function inspectR4aCompactIndex(
-  runner: R4aCompactIndexSqlRunner,
-  table: R4aCompactIndexTable,
-): Promise<R4aCompactIndexInspection> {
-  const spec = TABLE_SPECS.find((candidate) => candidate.table === table);
-  if (!spec)
-    throw new Error(
-      `[r4a-compact-index-inspection] unsupported table: ${table}`,
-    );
-  let ownership: OwnershipDispositionTableEvidence | null = null;
-  let target = unavailable(spec.index);
-  let required: readonly R4aCatalogIndexEvidence[] = [];
-  try {
-    [ownership, target, required] = await Promise.all([
-      gatherOwnershipDispositionTableEvidence(runner, table),
-      inspectIndex(runner, compact(spec), table),
-      Promise.all(
-        spec.requiredIndexes.map((index) => inspectIndex(runner, index, table)),
-      ),
-    ]);
-  } catch {
+
+function decideR4aCompactIndexInspection(
+  spec: TableIndexSpec,
+  target: R4aCatalogIndexEvidence,
+  required: readonly R4aCatalogIndexEvidence[],
+  ownership: OwnershipDispositionTableEvidence | null,
+  catalogAvailable: boolean,
+): R4aCompactIndexInspection {
+  if (!catalogAvailable)
     return {
       spec,
       target,
@@ -383,7 +370,7 @@ export async function inspectR4aCompactIndex(
       decision: 'blocked-by-schema-drift',
       reasons: ['catalog-or-ownership-evidence-unavailable'],
     };
-  }
+
   const requiredIntact = required.every(
     (index) =>
       index.exact &&
@@ -447,4 +434,42 @@ export async function inspectR4aCompactIndex(
         : 'table-specific-disposition-ready-and-schema-intact',
     ],
   };
+}
+/** SELECT-only. Never reads audit_events, opens a connection, or mutates schema/data. */
+export async function inspectR4aCompactIndex(
+  runner: R4aCompactIndexSqlRunner,
+  table: R4aCompactIndexTable,
+): Promise<R4aCompactIndexInspection> {
+  const spec = TABLE_SPECS.find((candidate) => candidate.table === table);
+  if (!spec)
+    throw new Error(
+      `[r4a-compact-index-inspection] unsupported table: ${table}`,
+    );
+  let ownership: OwnershipDispositionTableEvidence | null = null;
+  let target = unavailable(spec.index);
+  let required: readonly R4aCatalogIndexEvidence[] = [];
+  try {
+    [ownership, target, required] = await Promise.all([
+      gatherOwnershipDispositionTableEvidence(runner, table),
+      inspectIndex(runner, compact(spec), table),
+      Promise.all(
+        spec.requiredIndexes.map((index) => inspectIndex(runner, index, table)),
+      ),
+    ]);
+  } catch {
+    return decideR4aCompactIndexInspection(
+      spec,
+      target,
+      required,
+      ownership,
+      false,
+    );
+  }
+  return decideR4aCompactIndexInspection(
+    spec,
+    target,
+    required,
+    ownership,
+    true,
+  );
 }

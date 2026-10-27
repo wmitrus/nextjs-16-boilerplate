@@ -389,11 +389,17 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
       );
       // postgres.js queries are lazy thenables; attaching `then` starts the
       // build before we observe its pg_index state from another session.
+      // Both outcomes are settled here: the cancel's error can arrive before
+      // pg_cancel_backend() returns, and an unobserved rejection in that gap
+      // is reported as an unhandled error.
       const build = builder
         .unsafe(
           'CREATE UNIQUE INDEX CONCURRENTLY uq_feature_flags_key_organization_compact ON public.feature_flags USING btree (key, organization_id) NULLS NOT DISTINCT',
         )
-        .then((rows) => rows);
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
       let interruptedAtReady = false;
       for (let attempt = 0; attempt < 400; attempt += 1) {
         const state = await indexState(
@@ -407,7 +413,8 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
         }
         await new Promise((resolve) => setTimeout(resolve, 5));
       }
-      await expect(build).rejects.toThrow();
+      // 57014 = query_canceled: the build was stopped by our cancel.
+      expect(await build).toMatchObject({ code: '57014' });
       expect(interruptedAtReady).toBe(true);
       expect(
         await indexState(client!, 'uq_feature_flags_key_organization_compact'),

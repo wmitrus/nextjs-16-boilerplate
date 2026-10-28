@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -7,7 +9,7 @@ import {
   type R4aOperatorDeps,
 } from './db-r4a-operator-check';
 
-const SECRET = 'fixture-secret';
+const SECRET = randomBytes(18).toString('hex');
 const PROD_HOST = 'ep-prod-fixture.eu-central-1.aws.neon.tech';
 const PREVIEW_HOST = 'ep-preview-fixture.eu-central-1.aws.neon.tech';
 const PREVIEW_BRANCH = { id: 'br-preview-fixture', name: 'preview/feat/x' };

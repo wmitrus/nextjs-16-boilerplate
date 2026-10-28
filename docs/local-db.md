@@ -37,6 +37,8 @@ It also explains which local database profile each command family targets.
 | `pnpm db:migrate:prod`        | Production-style Postgres     | Apply migrations using `DATABASE_URL_UNPOOLED` (required; no `DATABASE_URL` fallback) |
 | `pnpm db:migrate:prod:local`  | Production-style Postgres     | Apply prod migrations locally with `.env.production`                                  |
 | `pnpm db:r4a:compact-indexes` | Production-style Postgres     | Operator-gated R4a compact-index inspection/execution; never automatic                |
+| `pnpm db:r4a:check:prod`      | Neon Production               | Identity-verified, read-only R4a `--check` (see R4a section)                          |
+| `pnpm db:r4a:check:preview`   | Neon Preview branch           | Identity-verified, read-only R4a `--check` for an explicit Preview branch             |
 
 All removed shorthand aliases stay removed. Use the explicit target-specific families above.
 
@@ -169,6 +171,39 @@ standard migration/deployment paths never import or invoke this executor.
 | `invalid-index-recovery-required` | Exact compact index exists but is not valid, ready and live; gate ready                       | STOP — separate `--recover-invalid` only (below) |
 | `blocked-by-disposition`          | Table-specific ownership disposition gate is not ready                                        | STOP — no DDL                                    |
 | `blocked-by-schema-drift`         | Wrong identity/definition, name collision, broken retained index, or missing catalog evidence | STOP — no DDL; investigate manually              |
+
+### Identity-verified `--check` shortcuts
+
+`pnpm db:r4a:check:prod` and
+`pnpm db:r4a:check:preview --git-branch=<git-branch>` run only `--check`.
+They accept no other arguments; `--apply` and `--recover-invalid` are refused.
+Both refuse, before any database connection, unless the target is proven:
+
+- `DATABASE_URL_UNPOOLED` must **not** be set in the shell. The target is read
+  only from the profile file: `.env.production.local` for Production,
+  `.env.preview.local` for Preview. `.env.local` is never a source.
+- The URL must be direct (no pooler marker) and set
+  `sslmode=require|verify-ca|verify-full`.
+- `.env.neon` (see `scripts/neon/neon.env.example`) supplies `NEON_API_KEY`
+  and `NEON_PROJECT_ID`. The Neon Management API must list the URL host as an
+  endpoint of the expected branch, and the URL database as that branch's
+  database:
+  - Production: project `sparkling-sun-12905030`, branch
+    `br-young-firefly-ag11fwch`, database `neondb` (all pinned in the
+    launcher).
+  - Preview: exactly one branch named `preview/<git-branch>`. It must not be
+    the Production branch, nor a default or protected branch, and must have a
+    single database.
+
+Provision the profile files without exposing them. Copy each direct
+connection string from the Neon console or the Vercel project's environment
+(Production / the Preview deployment's branch) into `DATABASE_URL_UNPOOLED=`
+in the matching file. Never paste it into a shell, command argument, ticket or
+log. All `.env*` files are git-ignored.
+
+On success the launcher prints the verified project, branch and database. It
+then prints the `--check` JSON. Read `evidence[].decision` for **both**
+`feature_flags` and `audit_log_settings` against the table above.
 
 ### Standard apply
 

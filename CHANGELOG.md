@@ -1,3 +1,10 @@
+## [2.25.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.25.0...v2.25.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **db:** separate R4a compact index recovery authorization ([7d35514](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7d35514292901402b0dfd0cff2cdcb3930ffa4b6))
+
 # [2.25.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.24.1...v2.25.0) (2026-10-27)
 
 

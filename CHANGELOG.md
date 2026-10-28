@@ -1,3 +1,10 @@
+# [2.26.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.25.1...v2.26.0) (2026-10-28)
+
+
+### Features
+
+* **db:** add identity-verified R4a operator preflight ([541f4e6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/541f4e6c1092496e014a4aae6d666f02a42d5e72))
+
 ## [2.25.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.25.0...v2.25.1) (2026-10-28)
 
 

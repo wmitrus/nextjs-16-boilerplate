@@ -1,4 +1,11 @@
-/** OZI-214 A.2 — explicit, session-scoped PostgreSQL R4a index executor. */
+/**
+ * OZI-214 A.2 — explicit, session-scoped PostgreSQL R4a index executor.
+ *
+ * OZI-217: two separately authorized operations share one session lifecycle.
+ * Standard convergence may only CREATE a missing index; it never DROPs.
+ * INVALID recovery (DROP + CREATE) runs only for explicitly named tables and
+ * only when the fresh in-lock inspection qualifies every one of them.
+ */
 import {
   inspectR4aCompactIndex,
   R4A_COMPACT_INDEX_SPECS,
@@ -162,13 +169,10 @@ function recoveryAllowed(inspection: R4aCompactIndexInspection): boolean {
   );
 }
 
-/** Mutating only when the caller has explicitly entered this function. */
-export async function runR4aCompactIndexExecutor(
+/** Lock -> timeout policy -> `work` -> restore timeouts -> unlock. */
+async function withExecutorSession(
   runner: R4aCompactIndexExecutorRunner,
-  tables: readonly R4aCompactIndexTable[] = [
-    'feature_flags',
-    'audit_log_settings',
-  ],
+  work: () => Promise<readonly R4aCompactIndexExecution[]>,
 ): Promise<readonly R4aCompactIndexExecution[]> {
   if (
     typeof (runner as Partial<R4aCompactIndexExecutorRunner>)
@@ -182,7 +186,7 @@ export async function runR4aCompactIndexExecutor(
   try {
     previous = await captureTimeouts(runner);
     await applyTimeouts(runner);
-    return await converge(runner, tables);
+    return await work();
   } finally {
     try {
       if (previous) await restoreTimeouts(runner, previous);
@@ -190,6 +194,91 @@ export async function runR4aCompactIndexExecutor(
       await release(runner);
     }
   }
+}
+
+/**
+ * Standard convergence (`--apply --production-approved`). Mutating only when
+ * the caller has explicitly entered this function. Never DROPs: an INVALID
+ * index is refused and needs the separate recovery authorization.
+ */
+export async function runR4aCompactIndexExecutor(
+  runner: R4aCompactIndexExecutorRunner,
+  tables: readonly R4aCompactIndexTable[] = [
+    'feature_flags',
+    'audit_log_settings',
+  ],
+): Promise<readonly R4aCompactIndexExecution[]> {
+  return withExecutorSession(runner, () => converge(runner, tables));
+}
+
+/**
+ * Exceptional INVALID-index recovery (`--recover-invalid --table <t>
+ * --production-approved`). Only the explicitly named tables are eligible, and
+ * every one must qualify under the lock before any DDL runs. A missing index
+ * is refused here -- recovery never performs an ordinary CREATE.
+ */
+export async function runR4aCompactIndexRecovery(
+  runner: R4aCompactIndexExecutorRunner,
+  tables: readonly R4aCompactIndexTable[],
+): Promise<readonly R4aCompactIndexExecution[]> {
+  if (tables.length === 0)
+    throw new R4aCompactIndexExecutorError(
+      'recovery requires at least one explicitly named table',
+    );
+  if (new Set(tables).size !== tables.length)
+    throw new R4aCompactIndexExecutorError('recovery tables must not repeat');
+  for (const table of tables) specFor(table);
+  return withExecutorSession(runner, () => recover(runner, tables));
+}
+
+async function recover(
+  runner: R4aCompactIndexSqlRunner,
+  tables: readonly R4aCompactIndexTable[],
+): Promise<readonly R4aCompactIndexExecution[]> {
+  // Qualify every named table before the first DROP, so a refused table can
+  // never leave an earlier one half-handled.
+  for (const table of tables) {
+    await assertLockHeld(runner);
+    assertRecoverable(table, await inspectR4aCompactIndex(runner, table));
+  }
+  const results: R4aCompactIndexExecution[] = [];
+  for (const table of tables) {
+    await assertLockHeld(runner);
+    // Re-inspect: an earlier table's rebuild may have taken a long time.
+    const before = await inspectR4aCompactIndex(runner, table);
+    assertRecoverable(table, before);
+    await runDdl(
+      runner,
+      `DROP INDEX CONCURRENTLY "public"."${specFor(table).index}"`,
+    );
+    await runDdl(runner, createSql(table));
+    results.push(await postflight(runner, table, 'recreated-invalid', before));
+  }
+  return results;
+}
+
+function assertRecoverable(
+  table: R4aCompactIndexTable,
+  inspection: R4aCompactIndexInspection,
+): void {
+  if (!recoveryAllowed(inspection))
+    throw new R4aCompactIndexExecutorError(
+      `${table} is ${inspection.decision}; INVALID recovery refused, no DDL`,
+    );
+}
+
+async function postflight(
+  runner: R4aCompactIndexSqlRunner,
+  table: R4aCompactIndexTable,
+  action: R4aCompactIndexExecution['action'],
+  before: R4aCompactIndexInspection,
+): Promise<R4aCompactIndexExecution> {
+  const after = await inspectR4aCompactIndex(runner, table);
+  if (after.decision !== 'already-converged')
+    throw new R4aCompactIndexExecutorError(
+      `${table} did not converge after ${action}`,
+    );
+  return { table, action, before, after };
 }
 
 async function converge(
@@ -205,23 +294,15 @@ async function converge(
     else if (before.decision === 'eligible-to-create') {
       await runDdl(runner, createSql(table));
       action = 'created';
-    } else if (recoveryAllowed(before)) {
-      await runDdl(
-        runner,
-        `DROP INDEX CONCURRENTLY "public"."${specFor(table).index}"`,
+    } else if (before.decision === 'invalid-index-recovery-required')
+      throw new R4aCompactIndexExecutorError(
+        `${table} is invalid-index-recovery-required; standard apply never drops -- use the separate --recover-invalid authorization; refusing DDL`,
       );
-      await runDdl(runner, createSql(table));
-      action = 'recreated-invalid';
-    } else
+    else
       throw new R4aCompactIndexExecutorError(
         `${table} is ${before.decision}; refusing DDL`,
       );
-    const after = await inspectR4aCompactIndex(runner, table);
-    if (after.decision !== 'already-converged')
-      throw new R4aCompactIndexExecutorError(
-        `${table} did not converge after ${action}`,
-      );
-    results.push({ table, action, before, after });
+    results.push(await postflight(runner, table, action, before));
   }
   return results;
 }

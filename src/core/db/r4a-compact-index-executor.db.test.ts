@@ -8,6 +8,7 @@ import {
   R4aCompactIndexExecutorError,
   r4aExecutorRunnerFromPostgres,
   runR4aCompactIndexExecutor,
+  runR4aCompactIndexRecovery,
   type R4aCompactIndexExecutorRunner,
 } from './r4a-compact-index-executor';
 import { inspectR4aCompactIndex } from './r4a-compact-index-inspection';
@@ -130,6 +131,21 @@ async function failCompactBuild(connection: Sql): Promise<void> {
   expect(
     await indexState(connection, 'uq_feature_flags_key_organization_compact'),
   ).toMatchObject({ valid: false, ready: false, live: true });
+}
+
+/** Same failed-build technique for audit_log_settings, then settles the table. */
+async function failAuditCompactBuildSettled(connection: Sql): Promise<void> {
+  await connection.unsafe(
+    "INSERT INTO public.audit_log_settings (category, tenant_id, enabled, retention_days, ownership_state) VALUES ('auth', 'one', true, 30, 'intentional_global'), ('auth', 'two', true, 30, 'unresolved_legacy')",
+  );
+  await expect(
+    connection.unsafe(
+      'CREATE UNIQUE INDEX CONCURRENTLY uq_audit_log_settings_category_organization_compact ON public.audit_log_settings USING btree (category, organization_id) NULLS NOT DISTINCT',
+    ),
+  ).rejects.toThrow();
+  await connection.unsafe(
+    "DELETE FROM public.audit_log_settings WHERE ownership_state = 'unresolved_legacy'",
+  );
 }
 
 /** Re-adds the identical ownership CHECK as NOT VALID; resetFixture re-validates it. */
@@ -279,7 +295,7 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
     await client!.unsafe("SET lock_timeout = '7s'");
     const statements: string[] = [];
     const params: (readonly string[])[] = [];
-    const result = await runR4aCompactIndexExecutor(
+    const result = await runR4aCompactIndexRecovery(
       runner(client!, statements, params),
       ['feature_flags'],
     );
@@ -327,6 +343,11 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
           'feature_flags',
         ]),
       ).rejects.toThrow('blocked-by-disposition');
+      await expect(
+        runR4aCompactIndexRecovery(runner(client!, statements), [
+          'feature_flags',
+        ]),
+      ).rejects.toThrow('blocked-by-disposition; INVALID recovery refused');
       expect(statements.filter(isIndexDdl)).toEqual([]);
       expect(
         await indexState(client!, 'uq_feature_flags_key_organization_compact'),
@@ -426,9 +447,15 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
           'feature_flags',
         ]),
       ).rejects.toThrow('invalid-index-recovery-required');
+      await expect(
+        runR4aCompactIndexRecovery(runner(client!, statements), [
+          'feature_flags',
+        ]),
+      ).rejects.toThrow('INVALID recovery refused');
+      expect(statements.filter(isIndexDdl)).toEqual([]);
       expect(
-        statements.some((statement) => statement.startsWith('DROP INDEX')),
-      ).toBe(false);
+        await indexState(client!, 'uq_feature_flags_key_organization_compact'),
+      ).toMatchObject({ valid: false, ready: true, live: true });
     } finally {
       await builder.end({ timeout: 5 });
       await observer.end({ timeout: 5 });
@@ -577,6 +604,176 @@ describe('r4a compact-index executor — isolated real PostgreSQL', () => {
       );
       await other.end({ timeout: 5 });
     }
+  });
+
+  describe('OZI-217 standard apply vs INVALID recovery authorization', () => {
+    const ffCompact = 'uq_feature_flags_key_organization_compact';
+    const auditCompact = 'uq_audit_log_settings_category_organization_compact';
+
+    it('standard apply refuses a table that turned INVALID after an eligible --check; only explicit recovery fixes it', async () => {
+      // Read-only --check sees an eligible table...
+      await expect(
+        inspectR4aCompactIndex(runner(client!), 'feature_flags'),
+      ).resolves.toMatchObject({ decision: 'eligible-to-create' });
+      // ...then the state changes before --apply runs.
+      await failCompactBuild(client!);
+      await client!.unsafe(
+        "DELETE FROM public.feature_flags WHERE ownership_state = 'unresolved_legacy'",
+      );
+
+      const applied: string[] = [];
+      await expect(
+        runR4aCompactIndexExecutor(runner(client!, applied), ['feature_flags']),
+      ).rejects.toThrow('standard apply never drops');
+      expect(applied.filter(isIndexDdl)).toEqual([]);
+      expect(await indexState(client!, ffCompact)).toMatchObject({
+        valid: false,
+        ready: false,
+        live: true,
+      });
+
+      const recovered: string[] = [];
+      await expect(
+        runR4aCompactIndexRecovery(runner(client!, recovered), [
+          'feature_flags',
+        ]),
+      ).resolves.toMatchObject([
+        { table: 'feature_flags', action: 'recreated-invalid' },
+      ]);
+      expect(recovered.filter(isIndexDdl)).toEqual([
+        `DROP INDEX CONCURRENTLY "public"."${ffCompact}"`,
+        expect.stringContaining(
+          `CREATE UNIQUE INDEX CONCURRENTLY "${ffCompact}"`,
+        ),
+      ]);
+      expect(await indexState(client!, ffCompact)).toMatchObject({
+        valid: true,
+        ready: true,
+        live: true,
+        nullsNotDistinct: true,
+      });
+    });
+
+    it('recovers only the named table and leaves another INVALID table untouched', async () => {
+      await failCompactBuild(client!);
+      await client!.unsafe(
+        "DELETE FROM public.feature_flags WHERE ownership_state = 'unresolved_legacy'",
+      );
+      await failAuditCompactBuildSettled(client!);
+      const before = await retainedSnapshot(client!);
+
+      const statements: string[] = [];
+      await runR4aCompactIndexRecovery(runner(client!, statements), [
+        'feature_flags',
+      ]);
+      expect(
+        statements.filter(isIndexDdl).some((s) => s.includes(auditCompact)),
+      ).toBe(false);
+      expect(await indexState(client!, auditCompact)).toMatchObject({
+        valid: false,
+        ready: false,
+        live: true,
+      });
+      expect(await indexState(client!, ffCompact)).toMatchObject({
+        valid: true,
+      });
+      expect(await retainedSnapshot(client!)).toEqual(before);
+    });
+
+    it('recovery never performs an ordinary CREATE for an absent index', async () => {
+      const statements: string[] = [];
+      await expect(
+        runR4aCompactIndexRecovery(runner(client!, statements), [
+          'feature_flags',
+        ]),
+      ).rejects.toThrow('eligible-to-create; INVALID recovery refused');
+      expect(statements.filter(isIndexDdl)).toEqual([]);
+      expect(await indexState(client!, ffCompact)).toBeUndefined();
+    });
+
+    it('recovery refuses a wrong real definition without dropping it', async () => {
+      await client!.unsafe(
+        `CREATE UNIQUE INDEX CONCURRENTLY ${ffCompact} ON public.feature_flags USING btree (organization_id, key) NULLS NOT DISTINCT`,
+      );
+      const statements: string[] = [];
+      await expect(
+        runR4aCompactIndexRecovery(runner(client!, statements), [
+          'feature_flags',
+        ]),
+      ).rejects.toThrow('blocked-by-schema-drift; INVALID recovery refused');
+      expect(statements.filter(isIndexDdl)).toEqual([]);
+      expect(await indexState(client!, ffCompact)).toMatchObject({
+        valid: true,
+      });
+    });
+
+    it('recovery refuses when a retained index is missing', async () => {
+      await failCompactBuild(client!);
+      await client!.unsafe(
+        "DELETE FROM public.feature_flags WHERE ownership_state = 'unresolved_legacy'",
+      );
+      const retained = 'uq_feature_flags_key_intentional_global';
+      const [{ definition }] = await client!.unsafe<{ definition: string }[]>(
+        `SELECT pg_get_indexdef('public.${retained}'::regclass) AS definition`,
+      );
+      await client!.unsafe(`DROP INDEX public.${retained}`);
+      try {
+        const statements: string[] = [];
+        await expect(
+          runR4aCompactIndexRecovery(runner(client!, statements), [
+            'feature_flags',
+          ]),
+        ).rejects.toThrow('blocked-by-schema-drift; INVALID recovery refused');
+        expect(statements.filter(isIndexDdl)).toEqual([]);
+        expect(await indexState(client!, ffCompact)).toMatchObject({
+          valid: false,
+          ready: false,
+        });
+      } finally {
+        await client!.unsafe(definition);
+      }
+    });
+
+    it('recovery refuses CREATE when the session loses its lock after DROP', async () => {
+      await failCompactBuild(client!);
+      await client!.unsafe(
+        "DELETE FROM public.feature_flags WHERE ownership_state = 'unresolved_legacy'",
+      );
+      const other = await openClient();
+      const statements: string[] = [];
+      let switched = false;
+      const original = runner(client!, statements);
+      const replacement = runner(other, statements);
+      // Simulates the driver retiring the connection right after the DROP.
+      const switching: R4aCompactIndexExecutorRunner = {
+        query: async <T>(statement: string) => {
+          const rows = await (switched ? replacement : original).query<T>(
+            statement,
+          );
+          if (statement.startsWith('DROP INDEX')) switched = true;
+          return rows;
+        },
+        queryWithParams: (statement, values) =>
+          (switched ? replacement : original).queryWithParams(
+            statement,
+            values,
+          ),
+      };
+      try {
+        await expect(
+          runR4aCompactIndexRecovery(switching, ['feature_flags']),
+        ).rejects.toThrow('no longer holds the advisory lock');
+        expect(statements.filter(isIndexDdl)).toEqual([
+          `DROP INDEX CONCURRENTLY "public"."${ffCompact}"`,
+        ]);
+        expect(await indexState(client!, ffCompact)).toBeUndefined();
+      } finally {
+        await client!.unsafe(
+          `SELECT pg_advisory_unlock(${R4A_COMPACT_INDEX_LOCK.namespace}, ${R4A_COMPACT_INDEX_LOCK.id})`,
+        );
+        await other.end({ timeout: 5 });
+      }
+    });
   });
 
   it('refuses a public pg_class name collision that is not an index', async () => {

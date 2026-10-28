@@ -14,12 +14,14 @@ function deps() {
   }));
   const inspect = vi.fn(async () => ({ decision: 'eligible-to-create' }));
   const execute = vi.fn(async () => []);
+  const recover = vi.fn(async () => []);
   const log = vi.fn();
   return {
-    value: { open, inspect, execute, log } as unknown as R4aCliDeps,
+    value: { open, inspect, execute, recover, log } as unknown as R4aCliDeps,
     open,
     inspect,
     execute,
+    recover,
     log,
     end,
   };
@@ -50,6 +52,90 @@ describe('db-r4a-compact-indexes CLI', () => {
     );
     expect(d.execute).toHaveBeenCalledTimes(1);
     expect(d.inspect).not.toHaveBeenCalled();
+    expect(d.recover).not.toHaveBeenCalled();
+  });
+  it.each([
+    [['feature_flags']],
+    [['feature_flags', 'audit_log_settings']],
+    [['audit_log_settings']],
+  ])('runs INVALID recovery only for the named tables %j', async (tables) => {
+    const d = deps();
+    await runR4aCompactIndexesCli(
+      [
+        '--recover-invalid',
+        ...tables.flatMap((table) => ['--table', table]),
+        '--production-approved',
+      ],
+      URL,
+      d.value,
+    );
+    expect(d.recover).toHaveBeenCalledTimes(1);
+    expect(d.recover.mock.calls[0]).toEqual([expect.anything(), tables]);
+    expect(d.execute).not.toHaveBeenCalled();
+    expect(d.inspect).not.toHaveBeenCalled();
+    expect(d.log.mock.calls[0]?.[0]).toMatchObject({
+      mode: 'recover-invalid',
+      tables,
+    });
+    expect(d.end).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    {
+      label: 'recovery without a table',
+      args: ['--recover-invalid', '--production-approved'],
+      error: 'at least one --table',
+    },
+    {
+      label: 'recovery without its approval',
+      args: ['--recover-invalid', '--table', 'feature_flags'],
+      error: 'requires its own --production-approved',
+    },
+    {
+      label: 'recovery of an unknown table',
+      args: [
+        '--recover-invalid',
+        '--table',
+        'audit_events',
+        '--production-approved',
+      ],
+      error: 'accepts only distinct --table',
+    },
+    {
+      label: 'recovery of a repeated table',
+      args: [
+        '--recover-invalid',
+        '--table',
+        'feature_flags',
+        '--table',
+        'feature_flags',
+        '--production-approved',
+      ],
+      error: 'accepts only distinct --table',
+    },
+    {
+      label: 'standard apply combined with recovery',
+      args: [
+        '--apply',
+        '--recover-invalid',
+        '--table',
+        'feature_flags',
+        '--production-approved',
+      ],
+      error: 'usage',
+    },
+    {
+      label: 'standard apply with a table',
+      args: ['--apply', '--production-approved', '--table', 'feature_flags'],
+      error: 'usage',
+    },
+  ])('rejects $label without opening a client', async ({ args, error }) => {
+    const d = deps();
+    await expect(runR4aCompactIndexesCli(args, URL, d.value)).rejects.toThrow(
+      error,
+    );
+    expect(d.open).not.toHaveBeenCalled();
+    expect(d.execute).not.toHaveBeenCalled();
+    expect(d.recover).not.toHaveBeenCalled();
   });
   it.each([
     { args: [] },

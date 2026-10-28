@@ -162,13 +162,13 @@ standard migration/deployment paths never import or invoke this executor.
 
 ### Decisions reported by `--check`
 
-| Decision                          | Meaning                                                                                       | Operator action                                    |
-| --------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `eligible-to-create`              | Gate ready, retained indexes intact, compact index absent                                     | Standard `--apply` allowed                         |
-| `already-converged`               | Exact compact index exists and is valid, ready and live                                       | Standard `--apply` allowed (no-op)                 |
-| `invalid-index-recovery-required` | Exact compact index exists but is not valid, ready and live; gate ready                       | STOP — exceptional recovery procedure only (below) |
-| `blocked-by-disposition`          | Table-specific ownership disposition gate is not ready                                        | STOP — no DDL                                      |
-| `blocked-by-schema-drift`         | Wrong identity/definition, name collision, broken retained index, or missing catalog evidence | STOP — no DDL; investigate manually                |
+| Decision                          | Meaning                                                                                       | Operator action                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `eligible-to-create`              | Gate ready, retained indexes intact, compact index absent                                     | Standard `--apply` allowed                       |
+| `already-converged`               | Exact compact index exists and is valid, ready and live                                       | Standard `--apply` allowed (no-op)               |
+| `invalid-index-recovery-required` | Exact compact index exists but is not valid, ready and live; gate ready                       | STOP — separate `--recover-invalid` only (below) |
+| `blocked-by-disposition`          | Table-specific ownership disposition gate is not ready                                        | STOP — no DDL                                    |
+| `blocked-by-schema-drift`         | Wrong identity/definition, name collision, broken retained index, or missing catalog evidence | STOP — no DDL; investigate manually              |
 
 ### Standard apply
 
@@ -180,11 +180,13 @@ standard migration/deployment paths never import or invoke this executor.
    `already-converged`. Any other decision is a STOP for the standard path.
 4. Apply explicitly with
    `pnpm db:r4a:compact-indexes --apply --production-approved`.
-5. The executor takes a session advisory lock, applies its own timeout policy,
-   re-runs the full inspection and gate checks while holding that lock, then
-   uses `CREATE UNIQUE INDEX CONCURRENTLY` outside a transaction. After any DDL
-   it re-inspects and fails unless the index is `already-converged`. It keeps
-   legacy/partial indexes and `tenant_id` unchanged.
+5. The executor pins one physical connection, takes a session advisory lock,
+   applies its own timeout policy, re-runs the full inspection and gate checks
+   while holding that lock, verifies the lock is still held immediately before
+   each DDL statement, then uses `CREATE UNIQUE INDEX CONCURRENTLY` outside a
+   transaction. After any DDL it re-inspects and fails unless the index is
+   `already-converged`. It keeps legacy/partial indexes and `tenant_id`
+   unchanged.
 
 A `--check` result is evidence, not a standing authorization. `--apply
 --production-approved` never trusts an earlier `--check`: it re-inspects and
@@ -192,11 +194,12 @@ re-evaluates every condition at execution time and acts only on that fresh
 result. The database can change between the two runs, so take `--check`
 immediately before `--apply` and re-run it if anything may have changed.
 
-The CLI has a single `--apply` mode. If the state at execution time has become
-`invalid-index-recovery-required` and qualifies (see below), the executor
-performs the recovery `DROP`/`CREATE` in that same run. The standard path
-therefore relies on step 3: never run `--apply` unless the fresh `--check`
-shows only `eligible-to-create` / `already-converged`.
+Standard `--apply` authorizes only `CREATE` of a missing index and no-ops. It
+never drops: if the fresh in-lock inspection finds
+`invalid-index-recovery-required` (for example, the table became INVALID after
+an earlier `--check`), it stops before any DDL and requires the separate
+recovery authorization below. Any other non-eligible decision also stops with
+no DDL.
 
 ### Exceptional INVALID-index recovery
 
@@ -214,10 +217,28 @@ the affected table showing **all** of:
   quarantined rows, no invalid combinations, ownership `CHECK` exact and
   validated).
 
-With that decision recorded, run the same
-`pnpm db:r4a:compact-indexes --apply --production-approved`. Under its lock the
-executor re-checks these conditions and drops and recreates only that fully
-verified relation; it refuses if any condition no longer holds.
+With that decision recorded, run recovery for exactly the approved table(s):
+
+```bash
+pnpm db:r4a:compact-indexes --recover-invalid --table feature_flags --production-approved
+# both tables, only when both were separately approved:
+pnpm db:r4a:compact-indexes --recover-invalid --table feature_flags --table audit_log_settings --production-approved
+```
+
+The recovery approval is scoped to the named tables; standard `--apply` approval
+never extends to it. Arguments are parsed strictly: at least one distinct
+`--table` (`feature_flags` or `audit_log_settings`) and a trailing
+`--production-approved` are required, and anything else is rejected before a
+connection opens.
+
+Under its lock the executor first re-qualifies **every** named table and stops
+with no DDL if any of them fails; then, per table, it re-inspects again, checks
+the lock, issues `DROP INDEX CONCURRENTLY`, checks the lock again, and issues
+`CREATE UNIQUE INDEX CONCURRENTLY` for that single verified relation. If the
+lock or session is lost after the `DROP`, it refuses the `CREATE`; the index is
+then absent and the table reports `eligible-to-create` for a fresh standard
+`--apply`. Recovery never creates an absent index and never touches a table
+that was not named.
 
 STOP — no DDL — for any other state, including an `INVALID` but ready index,
 a wrong definition, a name collision, incomplete catalog evidence, or a

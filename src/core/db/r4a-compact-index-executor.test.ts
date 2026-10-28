@@ -4,6 +4,7 @@ import {
   R4aCompactIndexAlreadyRunningError,
   R4aCompactIndexExecutorError,
   runR4aCompactIndexExecutor,
+  runR4aCompactIndexRecovery,
   type R4aCompactIndexExecutorRunner,
 } from './r4a-compact-index-executor';
 import type { R4aCompactIndexInspection } from './r4a-compact-index-inspection';
@@ -154,9 +155,10 @@ describe('r4a compact-index executor', () => {
   it('recovers only exact invalid not-ready live indexes', async () => {
     inspect
       .mockResolvedValueOnce(inspection('invalid-index-recovery-required'))
+      .mockResolvedValueOnce(inspection('invalid-index-recovery-required'))
       .mockResolvedValueOnce(inspection('already-converged'));
     const db = runner();
-    const result = await runR4aCompactIndexExecutor(db, ['feature_flags']);
+    const result = await runR4aCompactIndexRecovery(db, ['feature_flags']);
     expect(result[0]?.action).toBe('recreated-invalid');
     expect(
       db.sql.some((sql) => sql.startsWith('DROP INDEX CONCURRENTLY')),
@@ -213,9 +215,10 @@ describe('r4a compact-index executor', () => {
     it('runs recovery DROP/CREATE under the active policy', async () => {
       inspect
         .mockResolvedValueOnce(inspection('invalid-index-recovery-required'))
+        .mockResolvedValueOnce(inspection('invalid-index-recovery-required'))
         .mockResolvedValueOnce(inspection('already-converged'));
       const db = runner();
-      await runR4aCompactIndexExecutor(db, ['feature_flags']);
+      await runR4aCompactIndexRecovery(db, ['feature_flags']);
       const drop = firstIndex(db.sql, 'DROP INDEX CONCURRENTLY');
       expect(firstIndex(db.sql, 'SET lock_timeout')).toBeLessThan(drop);
       expect(firstIndex(db.sql, 'SET statement_timeout')).toBeLessThan(drop);
@@ -360,13 +363,149 @@ describe('r4a compact-index executor', () => {
 
     it('does not CREATE after DROP when the session lock is lost in between', async () => {
       inspect.mockResolvedValue(inspection('invalid-index-recovery-required'));
-      const db = runner({ held: [true, true, false] });
+      // qualify-all check, per-table check, before DROP, before CREATE
+      const db = runner({ held: [true, true, true, false] });
       await expect(
-        runR4aCompactIndexExecutor(db, ['feature_flags']),
+        runR4aCompactIndexRecovery(db, ['feature_flags']),
       ).rejects.toThrow(lost);
       expect(ddl(db.sql)).toEqual([
         'DROP INDEX CONCURRENTLY "public"."uq_feature_flags_key_organization_compact"',
       ]);
+    });
+  });
+
+  describe('OZI-217 authorization split', () => {
+    const recoverable = () => inspection('invalid-index-recovery-required');
+    const invalidButReady = (): R4aCompactIndexInspection => {
+      const base = recoverable();
+      return { ...base, target: { ...base.target, ready: true } };
+    };
+
+    describe('standard apply', () => {
+      it('refuses a fully qualifying INVALID index with zero DROP and zero CREATE', async () => {
+        inspect.mockResolvedValue(recoverable());
+        const db = runner();
+        await expect(
+          runR4aCompactIndexExecutor(db, ['feature_flags']),
+        ).rejects.toThrow(/standard apply never drops.*--recover-invalid/);
+        expect(ddl(db.sql)).toEqual([]);
+        expect(db.sql.at(-1)).toContain('pg_advisory_unlock');
+      });
+
+      it('fails closed when a table turned INVALID after an eligible --check', async () => {
+        // The operator's earlier read-only --check saw eligible-to-create;
+        // the in-lock re-inspection is what counts.
+        inspect.mockResolvedValue(recoverable());
+        const db = runner();
+        await expect(runR4aCompactIndexExecutor(db)).rejects.toThrow(
+          'invalid-index-recovery-required',
+        );
+        expect(ddl(db.sql)).toEqual([]);
+        expect(inspect).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('recovery', () => {
+      it.each([
+        ['no table', [] as const, 'at least one explicitly named table'],
+        [
+          'a repeated table',
+          ['feature_flags', 'feature_flags'] as const,
+          'must not repeat',
+        ],
+        [
+          'an unsupported table',
+          ['audit_events'] as unknown as readonly ['feature_flags'],
+          'unsupported table',
+        ],
+      ])('refuses %s before any SQL', async (_label, tables, message) => {
+        const db = runner();
+        await expect(runR4aCompactIndexRecovery(db, tables)).rejects.toThrow(
+          message,
+        );
+        expect(db.sql).toEqual([]);
+        expect(inspect).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['an absent index (never an ordinary CREATE)', 'eligible-to-create'],
+        ['an already converged index', 'already-converged'],
+        [
+          'a wrong definition or broken retained index',
+          'blocked-by-schema-drift',
+        ],
+        ['an unready ownership gate', 'blocked-by-disposition'],
+      ] as const)('refuses %s with no DDL', async (_label, decision) => {
+        inspect.mockResolvedValue(inspection(decision));
+        const db = runner();
+        await expect(
+          runR4aCompactIndexRecovery(db, ['feature_flags']),
+        ).rejects.toThrow(`is ${decision}; INVALID recovery refused`);
+        expect(ddl(db.sql)).toEqual([]);
+        expect(db.sql.at(-1)).toContain('pg_advisory_unlock');
+      });
+
+      it('refuses an INVALID but ready index with no DDL', async () => {
+        inspect.mockResolvedValue(invalidButReady());
+        const db = runner();
+        await expect(
+          runR4aCompactIndexRecovery(db, ['feature_flags']),
+        ).rejects.toThrow('INVALID recovery refused');
+        expect(ddl(db.sql)).toEqual([]);
+      });
+
+      it('qualifies every named table before the first DROP', async () => {
+        inspect
+          .mockResolvedValueOnce(recoverable())
+          .mockResolvedValueOnce(inspection('blocked-by-disposition'));
+        const db = runner();
+        await expect(
+          runR4aCompactIndexRecovery(db, [
+            'feature_flags',
+            'audit_log_settings',
+          ]),
+        ).rejects.toThrow('audit_log_settings is blocked-by-disposition');
+        expect(ddl(db.sql)).toEqual([]);
+      });
+
+      it('re-inspects immediately before DROP and refuses a changed state', async () => {
+        inspect
+          .mockResolvedValueOnce(recoverable())
+          .mockResolvedValueOnce(invalidButReady());
+        const db = runner();
+        await expect(
+          runR4aCompactIndexRecovery(db, ['feature_flags']),
+        ).rejects.toThrow('INVALID recovery refused');
+        expect(ddl(db.sql)).toEqual([]);
+      });
+
+      it('recovers only the named table, checking the lock before DROP and CREATE', async () => {
+        inspect
+          .mockResolvedValueOnce(recoverable())
+          .mockResolvedValueOnce(recoverable())
+          .mockResolvedValueOnce(inspection('already-converged'));
+        const db = runner();
+        await expect(
+          runR4aCompactIndexRecovery(db, ['feature_flags']),
+        ).resolves.toMatchObject([
+          { table: 'feature_flags', action: 'recreated-invalid' },
+        ]);
+        expect(ddl(db.sql)).toEqual([
+          'DROP INDEX CONCURRENTLY "public"."uq_feature_flags_key_organization_compact"',
+          expect.stringContaining(
+            'CREATE UNIQUE INDEX CONCURRENTLY "uq_feature_flags_key_organization_compact"',
+          ),
+        ]);
+        for (const statement of ddl(db.sql))
+          expect(db.sql[db.sql.indexOf(statement) - 1]).toContain(
+            'FROM pg_locks',
+          );
+        expect(inspect.mock.calls.map((call) => call[1])).toEqual([
+          'feature_flags',
+          'feature_flags',
+          'feature_flags',
+        ]);
+      });
     });
   });
 });

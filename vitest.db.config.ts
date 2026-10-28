@@ -24,6 +24,7 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       'src/core/db/r4a-compact-index-executor.db.test.ts',
+      'src/modules/audit-log/infrastructure/drizzle/r4a-runtime-cutover.db.test.ts',
     ],
     pool: 'threads',
     maxWorkers: 16,

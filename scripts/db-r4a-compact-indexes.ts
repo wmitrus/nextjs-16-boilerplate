@@ -32,7 +32,7 @@ const R4A_TABLES: readonly R4aCompactIndexTable[] = [
 const USAGE =
   'usage: --check | --apply --production-approved | --recover-invalid --table <feature_flags|audit_log_settings> [--table <...>] --production-approved';
 
-type R4aCliCommand =
+export type R4aCliCommand =
   | { readonly mode: 'check' }
   | { readonly mode: 'apply' }
   | {
@@ -123,7 +123,21 @@ export async function runR4aCompactIndexesCli(
   unpooledUrl: string | undefined,
   deps: R4aCliDeps = defaults(),
 ): Promise<void> {
-  const command = parseR4aCliArgs(args);
+  await runR4aCompactIndexCommand(parseR4aCliArgs(args), unpooledUrl, deps);
+}
+
+/**
+ * The already-authorized command, without argv. `runR4aCompactIndexesCli`
+ * authorizes it from its own `--production-approved` argv; the Preview
+ * launcher (`db-r4a-operator-check.ts`) authorizes it with `--preview-approved`
+ * plus the Neon identity proof and passes `{ mode: 'apply' }` directly, so it
+ * never forges the Production approval token (OZI-219).
+ */
+export async function runR4aCompactIndexCommand(
+  command: R4aCliCommand,
+  unpooledUrl: string | undefined,
+  deps: R4aCliDeps = defaults(),
+): Promise<void> {
   const url = unpooledUrl?.trim();
   if (!url) throw new Error('DATABASE_URL_UNPOOLED is required');
   assertNoKnownPoolerMarker(url, 'R4a compact-index executor');

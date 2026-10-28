@@ -787,8 +787,19 @@ function eventExpectedState(decision: AuditOwnershipBackfillDecision) {
   );
 }
 
-function isSettingsCanonicalPartialUniqueViolation(error: unknown): boolean {
-  const constraint = 'uq_audit_log_settings_category_organization_canonical';
+/**
+ * A canonical `(category, organization_id)` collision is enforced by the
+ * semantic partial unique and, from R4a-A (OZI-219), the compact
+ * `NULLS NOT DISTINCT` unique -- the only one left after R4a-C.
+ */
+const SETTINGS_CANONICAL_UNIQUES: ReadonlySet<string> = new Set([
+  'uq_audit_log_settings_category_organization_canonical',
+  'uq_audit_log_settings_category_organization_compact',
+]);
+
+export function isSettingsCanonicalPartialUniqueViolation(
+  error: unknown,
+): boolean {
   const layers: unknown[] = [
     error,
     error && typeof error === 'object'
@@ -813,8 +824,12 @@ function isSettingsCanonicalPartialUniqueViolation(error: unknown): boolean {
     const message =
       typeof candidate.message === 'string' ? candidate.message : '';
 
-    if (named === constraint || message.includes(constraint)) return true;
-    if (named && named !== constraint) return false;
+    if (
+      (named !== undefined && SETTINGS_CANONICAL_UNIQUES.has(named)) ||
+      [...SETTINGS_CANONICAL_UNIQUES].some((name) => message.includes(name))
+    )
+      return true;
+    if (named) return false;
     if (
       candidate.code === '23505' &&
       !named &&

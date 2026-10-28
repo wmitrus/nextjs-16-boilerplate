@@ -87,3 +87,26 @@ describe('db-ops runMigrate', () => {
     expect(opts.env.DB_PROVIDER).toBe('drizzle');
   });
 });
+
+describe('db-ops runMigrate — R4a target identity (OZI-219)', () => {
+  afterEach(() => {
+    mockSpawnSync.mockClear();
+    vi.unstubAllEnvs();
+  });
+
+  it('passes the identity read inside the local container to migrate-cli', () => {
+    runMigrate(DEV_URL, '7619451615054913566');
+
+    const [, , opts] = mockSpawnSync.mock.calls[0]!;
+    expect(opts.env.R4A_LOCAL_SYSTEM_IDENTIFIER).toBe('7619451615054913566');
+  });
+
+  it('pins the identity empty when absent: an inherited shell value never leaks in', () => {
+    vi.stubEnv('R4A_LOCAL_SYSTEM_IDENTIFIER', '7400000000000000001');
+
+    runMigrate(DEV_URL);
+
+    const [, , opts] = mockSpawnSync.mock.calls[0]!;
+    expect(opts.env.R4A_LOCAL_SYSTEM_IDENTIFIER).toBe('');
+  });
+});

@@ -32,14 +32,23 @@ const NEON_FILE = '.env.neon';
 const GIT_BRANCH_PATTERN = /^[A-Za-z0-9._][A-Za-z0-9._/-]{0,199}$/;
 const SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const USAGE =
-  'usage: production | preview --git-branch=<name> (read-only --check only)';
+  'usage: production | preview --git-branch=<name> (read-only --check) | preview-apply --git-branch=<name> --preview-approved (Preview schema A only)';
 
 type Profile = R4aOperatorCommand['profile'];
 const profileFile = (profile: Profile) =>
   profile === 'production' ? '.env.production.local' : '.env.preview.local';
+/**
+ * Production is check-only here: its apply stays the separately authorized
+ * `db:r4a:compact-indexes --apply --production-approved`. `apply` exists only
+ * for an identity-verified Preview branch (OZI-219 schema A provisioning).
+ */
 export type R4aOperatorCommand =
-  | { readonly profile: 'production' }
-  | { readonly profile: 'preview'; readonly gitBranch: string };
+  | { readonly profile: 'production'; readonly mode: 'check' }
+  | {
+      readonly profile: 'preview';
+      readonly mode: 'check' | 'apply';
+      readonly gitBranch: string;
+    };
 
 export interface R4aOperatorDeps {
   /** File contents, or undefined when the file does not exist. */
@@ -51,6 +60,8 @@ export interface R4aOperatorDeps {
   databaseNames(config: NeonConfig, branchId: string): Promise<string[]>;
   /** Runs the existing R4a CLI in `--check` mode against the verified URL. */
   runCheck(url: string): Promise<void>;
+  /** Runs the existing R4a CLI's standard `--apply` (create-only, no drop). */
+  runApply(url: string): Promise<void>;
   log(message: string): void;
 }
 
@@ -61,6 +72,16 @@ class R4aOperatorRefusal extends Error {
   }
 }
 
+function parseGitBranch(rest: readonly string[]): string | undefined {
+  const value =
+    rest.length === 1 && rest[0]?.startsWith('--git-branch=')
+      ? rest[0].slice('--git-branch='.length)
+      : rest.length === 2 && rest[0] === '--git-branch'
+        ? rest[1]
+        : undefined;
+  return value && GIT_BRANCH_PATTERN.test(value) ? value : undefined;
+}
+
 /** Strict whole-argv parsing; at most one `--`, only after the profile. */
 export function parseR4aOperatorArgs(
   argv: readonly string[],
@@ -69,17 +90,18 @@ export function parseR4aOperatorArgs(
   // after the profile; that single position is the only one accepted.
   const args = argv[1] === '--' ? [argv[0], ...argv.slice(2)] : [...argv];
   if (args.length === 1 && args[0] === 'production')
-    return { profile: 'production' };
-  if (args[0] === 'preview') {
-    const gitBranch =
-      args.length === 2 && args[1]?.startsWith('--git-branch=')
-        ? args[1].slice('--git-branch='.length)
-        : args.length === 3 && args[1] === '--git-branch'
-          ? args[2]
-          : undefined;
-    if (gitBranch && GIT_BRANCH_PATTERN.test(gitBranch))
-      return { profile: 'preview', gitBranch };
-  }
+    return { profile: 'production', mode: 'check' };
+  const checkBranch =
+    args[0] === 'preview' ? parseGitBranch(args.slice(1)) : undefined;
+  if (checkBranch)
+    return { profile: 'preview', mode: 'check', gitBranch: checkBranch };
+  // The approval is its own trailing token: never implied by `preview`.
+  const applyBranch =
+    args[0] === 'preview-apply' && args.at(-1) === '--preview-approved'
+      ? parseGitBranch(args.slice(1, -1))
+      : undefined;
+  if (applyBranch)
+    return { profile: 'preview', mode: 'apply', gitBranch: applyBranch };
   throw new R4aOperatorRefusal(USAGE);
 }
 
@@ -232,12 +254,13 @@ export async function runR4aOperatorCheck(
     );
 
   deps.log(
-    `[db-r4a-operator-check] verified ${command.profile}: project ${config.projectId}, branch ${branchId}, database ${target.database}; running read-only --check`,
+    `[db-r4a-operator-check] verified ${command.profile}: project ${config.projectId}, branch ${branchId}, database ${target.database}; running ${command.mode === 'apply' ? 'standard schema A --apply (create-only)' : 'read-only --check'}`,
   );
-  await deps.runCheck(target.url);
+  if (command.mode === 'apply') await deps.runApply(target.url);
+  else await deps.runCheck(target.url);
 }
 
-function defaults(): R4aOperatorDeps {
+export function defaultR4aOperatorDeps(): R4aOperatorDeps {
   return {
     readFile: (name) => {
       // Fixed repository-root file names only (profileFile / NEON_FILE).
@@ -262,16 +285,27 @@ function defaults(): R4aOperatorDeps {
         await import('./db-r4a-compact-indexes');
       await runR4aCompactIndexesCli(['--check'], url);
     },
+    runApply: async (url) => {
+      const { runR4aCompactIndexCommand } =
+        await import('./db-r4a-compact-indexes');
+      // The executor's standard convergence: CREATE a missing index, no-op a
+      // converged one, refuse anything else -- never DROP or recovery. The
+      // authorization is this launcher's `--preview-approved` plus the Neon
+      // proof that the target is this Preview branch and not Production; the
+      // Production `--production-approved` token is never passed (OZI-219).
+      await runR4aCompactIndexCommand({ mode: 'apply' }, url);
+    },
     log: (message) => console.log(message),
   };
 }
 
 if (process.argv[1]?.endsWith('/scripts/db-r4a-operator-check.ts')) {
-  void runR4aOperatorCheck(process.argv.slice(2), defaults()).catch(
-    async (error: unknown) => {
-      const { redactR4aCliError } = await import('./db-r4a-compact-indexes');
-      console.error('[db-r4a-operator-check]', redactR4aCliError(error));
-      process.exitCode = 1;
-    },
-  );
+  void runR4aOperatorCheck(
+    process.argv.slice(2),
+    defaultR4aOperatorDeps(),
+  ).catch(async (error: unknown) => {
+    const { redactR4aCliError } = await import('./db-r4a-compact-indexes');
+    console.error('[db-r4a-operator-check]', redactR4aCliError(error));
+    process.exitCode = 1;
+  });
 }

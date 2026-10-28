@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 import { resolveInternalApiKey } from './e2e/internal-api-key';
+import {
+  assertE2EServerIsolatedFromProductionServices,
+  E2E_DEFAULT_BASE_URL,
+  e2eIsolatedEnv,
+} from './e2e/production-service-guard';
 
 function parseBoolean(value: string | undefined): boolean | undefined {
   if (value === 'true') {
@@ -14,8 +19,7 @@ function parseBoolean(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
-const defaultBaseURL = 'http://localhost:3100';
-const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? defaultBaseURL;
+const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL;
 const resolvedBaseURL = new URL(baseURL);
 const basePort =
   resolvedBaseURL.port ||
@@ -27,9 +31,38 @@ const serverLogDir =
 const hasExplicitServerLogDir =
   typeof process.env.PLAYWRIGHT_SERVER_LOG_DIR === 'string' &&
   process.env.PLAYWRIGHT_SERVER_LOG_DIR.trim().length > 0;
-const reuseExistingServer =
-  parseBoolean(process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER) ??
-  (!process.env.CI && !hasExplicitServerLogDir);
+// OZI-219: never reuse a server this config did not start -- its env (and
+// so its Sentry/Upstash isolation) cannot be verified. A busy port fails.
+const reuseExistingServer = false;
+const serveBuild = Boolean(process.env.CI);
+
+// OZI-219: outbound-service keys pinned empty and NEXT_PUBLIC_APP_URL pinned
+// to this (loopback-only) base URL -- `.env.local` / `.env.production*` can
+// never point the E2E server at production services.
+const webServerEnv = e2eIsolatedEnv(
+  {
+    ...process.env,
+    PORT: basePort,
+    E2E_ENABLED: process.env.E2E_ENABLED ?? 'true',
+    INTERNAL_API_KEY: resolveInternalApiKey(process.env),
+    LOG_DIR: hasExplicitServerLogDir
+      ? serverLogDir
+      : (process.env.LOG_DIR ?? serverLogDir),
+    LOG_TO_FILE_DEV:
+      process.env.LOG_TO_FILE_DEV ?? (captureServerLogs ? 'true' : 'false'),
+    LOG_TO_FILE_PROD:
+      process.env.LOG_TO_FILE_PROD ?? (captureServerLogs ? 'true' : 'false'),
+    NEXT_DISABLE_DEV_OVERLAY: '1',
+    NEXT_PUBLIC_E2E_ENABLED: process.env.NEXT_PUBLIC_E2E_ENABLED ?? 'true',
+  },
+  baseURL,
+);
+
+// Fail closed before any web server starts.
+assertE2EServerIsolatedFromProductionServices(webServerEnv, {
+  dir: process.cwd(),
+  serveBuild,
+});
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -66,26 +99,12 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: process.env.CI ? 'pnpm start' : 'pnpm dev',
+    command: serveBuild ? 'pnpm start' : 'pnpm dev',
     url: baseURL,
     reuseExistingServer,
     stdout: 'ignore',
     stderr: 'ignore',
     timeout: 120000,
-    env: {
-      ...process.env,
-      PORT: basePort,
-      E2E_ENABLED: process.env.E2E_ENABLED ?? 'true',
-      INTERNAL_API_KEY: resolveInternalApiKey(process.env),
-      LOG_DIR: hasExplicitServerLogDir
-        ? serverLogDir
-        : (process.env.LOG_DIR ?? serverLogDir),
-      LOG_TO_FILE_DEV:
-        process.env.LOG_TO_FILE_DEV ?? (captureServerLogs ? 'true' : 'false'),
-      LOG_TO_FILE_PROD:
-        process.env.LOG_TO_FILE_PROD ?? (captureServerLogs ? 'true' : 'false'),
-      NEXT_DISABLE_DEV_OVERLAY: '1',
-      NEXT_PUBLIC_E2E_ENABLED: process.env.NEXT_PUBLIC_E2E_ENABLED ?? 'true',
-    },
+    env: webServerEnv,
   },
 });

@@ -11,6 +11,13 @@ import {
   sqlRunnerFromDrizzle,
   sqlRunnerFromPostgres,
 } from '@/core/db/post-migrate-steps';
+import {
+  assertR4aBootstrapTargetIdentity,
+  bootstrapR4aSchemaAConcurrent,
+  bootstrapR4aSchemaAPlain,
+  isLocalR4aBootstrapTarget,
+} from '@/core/db/r4a-compact-index-bootstrap';
+import { r4aExecutorRunnerFromPostgres } from '@/core/db/r4a-compact-index-executor';
 import { runS7PostMigrateSteps } from '@/core/db/s7-post-migrate-steps';
 import {
   assertS7ProductionPreconditions,
@@ -56,6 +63,20 @@ export interface RunMigrationsOptions {
    * session-affine).
    */
   postgresUrl?: string;
+  /**
+   * OZI-219 — converge the non-Production R4a-A schema (the two compact
+   * uniques) after migrations. Accepted only for PGlite or a loopback
+   * PostgreSQL that also carries `r4aTargetSystemIdentifier`; anything else is
+   * refused before the migrator runs. Production/Preview get schema A only
+   * through the operator executor.
+   */
+  r4aSchemaA?: 'bootstrap';
+  /**
+   * OZI-219 — the target cluster's `system_identifier`, read through a trusted
+   * channel (inside the Testcontainers / local compose container), never via
+   * `postgresUrl`. Verified on the bootstrap session before any DDL.
+   */
+  r4aTargetSystemIdentifier?: string;
 }
 
 export async function runMigrations(
@@ -107,6 +128,33 @@ export async function runMigrations(
         options.postgresUrl,
         'runMigrations convergence',
       );
+      if (
+        options.r4aSchemaA === 'bootstrap' &&
+        !isLocalR4aBootstrapTarget(options.postgresUrl)
+      ) {
+        throw new Error(
+          '[runMigrations] the R4a-A schema bootstrap is non-Production only ' +
+            'and refuses a non-loopback PostgreSQL target.',
+        );
+      }
+      if (
+        options.r4aSchemaA === 'bootstrap' &&
+        !options.r4aTargetSystemIdentifier
+      ) {
+        throw new Error(
+          '[runMigrations] the R4a-A schema bootstrap requires a trusted ' +
+            'target identity (r4aTargetSystemIdentifier); a loopback hostname ' +
+            'is not proof.',
+        );
+      }
+      // Proven on the migrator's own client BEFORE it writes, and again on
+      // the bootstrap session itself before any R4a DDL.
+      if (options.r4aSchemaA === 'bootstrap') {
+        await assertR4aBootstrapTargetIdentity(
+          sqlRunnerFromDrizzle(db, (text) => sql.raw(text)),
+          options.r4aTargetSystemIdentifier,
+        );
+      }
 
       // S7·resid destructive Production DDL is intentionally executable only
       // through the dedicated db:s7:cutover operator workflow. runMigrations
@@ -161,6 +209,9 @@ export async function runMigrations(
         log: postStepLog,
       });
       await runS7PostMigrateSteps(runner);
+      if (options.r4aSchemaA === 'bootstrap') {
+        postStepLog({ r4aSchemaA: await bootstrapR4aSchemaAPlain(runner) });
+      }
     } else {
       // Checked for a known pooler marker (defense-in-depth only -- does NOT
       // prove directness) and confirmed present at the top of `runMigrations`.
@@ -181,6 +232,36 @@ export async function runMigrations(
         await runS7PostMigrateSteps(runner);
       } finally {
         await affine.end({ timeout: 5 });
+      }
+
+      if (options.r4aSchemaA === 'bootstrap') {
+        // The executor's advisory lock and timeout policy live on one pinned,
+        // never-retired session.
+        const r4a = postgres(postgresUrl, {
+          prepare: false,
+          max: 1,
+          idle_timeout: 5,
+          connect_timeout: 10,
+          max_lifetime: null,
+        });
+        try {
+          const session = await r4a.reserve();
+          try {
+            postStepLog({
+              r4aSchemaA: await bootstrapR4aSchemaAConcurrent(
+                r4aExecutorRunnerFromPostgres(session),
+                {
+                  expectedSystemIdentifier:
+                    options.r4aTargetSystemIdentifier ?? '',
+                },
+              ),
+            });
+          } finally {
+            session.release();
+          }
+        } finally {
+          await r4a.end({ timeout: 5 });
+        }
       }
     }
 

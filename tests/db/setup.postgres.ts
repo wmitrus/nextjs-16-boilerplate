@@ -13,6 +13,7 @@ export async function setup(
   database = await startIsolatedPostgres();
 
   project.provide('TEST_DATABASE_URL', database.url);
+  project.provide('TEST_DATABASE_SYSTEM_IDENTIFIER', database.systemIdentifier);
 
   return teardown;
 }

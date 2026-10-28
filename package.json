@@ -11,6 +11,7 @@
     "dev": "next dev",
     "dev:webpack": "next dev --webpack",
     "build": "next build",
+    "e2e:build": "tsx scripts/e2e/build-e2e.ts",
     "start": "next start",
     "lint": "prettier --write '**/*.md' --log-level warn && eslint --cache --cache-location node_modules/.cache/eslint/.eslintcache --cache-strategy content",
     "typecheck": "next typegen && tsc --noEmit",
@@ -34,7 +35,7 @@
     "e2e:admin:audit-logs": "AUTH_PROVIDER=authjs FEATURE_FLAG_PROVIDER=db REGISTRATION_MODE=invite-only E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/admin.spec.ts --project=chromium --reporter=line",
     "e2e:demo-showcase": "AUTH_PROVIDER=authjs DEMO_SHOWCASE_ENABLED=true E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/feature-flags-demo.spec.ts --project=chromium --reporter=line",
     "e2e:csp-nonce-dynamic": "CSP_SCRIPT_MODE=nonce-dynamic playwright test e2e/csp-nonce-dynamic.spec.ts --project=chromium --reporter=line",
-    "e2e:csp-nonce-dynamic:ci": "CSP_SCRIPT_MODE=nonce-dynamic pnpm build && CSP_SCRIPT_MODE=nonce-dynamic playwright test e2e/csp-nonce-dynamic.spec.ts --project=chromium --reporter=line",
+    "e2e:csp-nonce-dynamic:ci": "CSP_SCRIPT_MODE=nonce-dynamic pnpm e2e:build && CSP_SCRIPT_MODE=nonce-dynamic playwright test e2e/csp-nonce-dynamic.spec.ts --project=chromium --reporter=line",
     "e2e:auth-matrix": "pnpm e2e:auth-matrix:phase1 && pnpm e2e:auth-matrix:phase2 && pnpm e2e:auth-matrix:phase3 && pnpm e2e:auth-matrix:phase4 && pnpm e2e:auth-matrix:phase5 && pnpm e2e:auth-matrix:phase6 && pnpm e2e:auth-matrix:phase7",
     "e2e:auth-matrix:phase1": "node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep @auth-matrix-phase1",
     "e2e:auth-matrix:phase2": "pnpm e2e:auth-matrix:phase2:returning-state && pnpm e2e:auth-matrix:phase2:direct-entry",
@@ -47,7 +48,7 @@
     "e2e:auth-matrix:phase5": "node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep @auth-matrix-phase5",
     "e2e:auth-matrix:phase6": "node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep @auth-matrix-phase6",
     "e2e:auth-matrix:phase7": "PLAYWRIGHT_SERVER_LOG_DIR=logs/playwright/auth-matrix-phase7 node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep @auth-matrix-phase7",
-    "e2e:auth-matrix:ci": "pnpm build && E2E_BACKEND_MODE=container pnpm e2e:auth-matrix",
+    "e2e:auth-matrix:ci": "pnpm e2e:build && E2E_BACKEND_MODE=container pnpm e2e:auth-matrix",
     "e2e:scenario:single": "node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --grep-invert @auth-matrix",
     "e2e:scenario:personal": "node scripts/e2e/run-scenario.mjs personal",
     "e2e:scenario:org-provider": "node scripts/e2e/run-scenario.mjs org-provider",
@@ -59,7 +60,7 @@
     "e2e:full": "pnpm e2e:matrix",
     "e2e:matrix": "pnpm e2e:auth && pnpm e2e:scenario:single && pnpm e2e:scenario:personal && pnpm e2e:scenario:org-provider && pnpm e2e:scenario:org-db",
     "e2e:ui": "node scripts/e2e/run-scenario.mjs single -- --ui",
-    "e2e:ci": "pnpm build && pnpm e2e:matrix",
+    "e2e:ci": "pnpm e2e:build && pnpm e2e:matrix",
     "prepare": "husky",
     "commit": "cz",
     "codex:review": "PR=$(gh pr view --json number --jq '.number') && echo \"Triggering Codex review for PR #$PR\" && gh pr comment \"$PR\" --body '@codex review'",
@@ -161,7 +162,8 @@
     "db:ownership-disposition": "tsx scripts/db-ownership-disposition-gate.ts",
     "db:ownership-disposition:local": "node --env-file=.env.production --import tsx scripts/db-ownership-disposition-gate.ts",
     "db:r4a:check:prod": "node --import tsx scripts/db-r4a-operator-check.ts production",
-    "db:r4a:check:preview": "node --import tsx scripts/db-r4a-operator-check.ts preview"
+    "db:r4a:check:preview": "node --import tsx scripts/db-r4a-operator-check.ts preview",
+    "db:r4a:apply:preview": "node --import tsx scripts/db-r4a-operator-check.ts preview-apply"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [

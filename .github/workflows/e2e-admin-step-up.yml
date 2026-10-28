@@ -90,7 +90,7 @@ jobs:
         # `pnpm e2e:admin:step-up` pins AUTH_PROVIDER=authjs (the provider
         # whose second factor this repository owns) and
         # ADMIN_STEP_UP_MODE=required.
-        run: pnpm build && pnpm e2e:admin:step-up
+        run: pnpm e2e:build && pnpm e2e:admin:step-up
         env:
           # Tripwire: the spec self-skips when the runtime is not
           # authjs + required, which in *this* job would mean a green check

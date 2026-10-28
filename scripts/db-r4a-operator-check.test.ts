@@ -2,7 +2,14 @@ import { randomBytes } from 'node:crypto';
 
 import { describe, expect, it, vi } from 'vitest';
 
+const compactIndexes = vi.hoisted(() => ({
+  runR4aCompactIndexesCli: vi.fn(async () => undefined),
+  runR4aCompactIndexCommand: vi.fn(async () => undefined),
+}));
+vi.mock('./db-r4a-compact-indexes', () => compactIndexes);
+
 import {
+  defaultR4aOperatorDeps,
   parseR4aOperatorArgs,
   R4A_PRODUCTION_TARGET,
   runR4aOperatorCheck,
@@ -24,6 +31,7 @@ function deps(
   env: Record<string, string | undefined> = {},
 ) {
   const runCheck = vi.fn(async () => undefined);
+  const runApply = vi.fn(async () => undefined);
   const value: R4aOperatorDeps = {
     readFile: (name) => new Map(Object.entries(files)).get(name),
     env,
@@ -45,9 +53,10 @@ function deps(
     ),
     databaseNames: vi.fn(async () => ['neondb']),
     runCheck,
+    runApply,
     log: vi.fn(),
   };
-  return { value, runCheck };
+  return { value, runCheck, runApply };
 }
 
 const prodFiles = {
@@ -73,7 +82,13 @@ async function expectRefusal(
   expect((error as Error).message).not.toContain(SECRET);
   // Zero database connections on every refusal.
   expect(d.runCheck).not.toHaveBeenCalled();
+  expect(d.runApply).not.toHaveBeenCalled();
 }
+const APPLY_ARGS = [
+  'preview-apply',
+  '--git-branch=feat/x',
+  '--preview-approved',
+];
 
 describe('db-r4a-operator-check', () => {
   it('runs --check for the verified Production target only', async () => {
@@ -98,7 +113,7 @@ describe('db-r4a-operator-check', () => {
 
   it('accepts the separated --git-branch form', () => {
     expect(parseR4aOperatorArgs(['preview', '--git-branch', 'feat/x'])).toEqual(
-      { profile: 'preview', gitBranch: 'feat/x' },
+      { profile: 'preview', mode: 'check', gitBranch: 'feat/x' },
     );
   });
 
@@ -120,6 +135,14 @@ describe('db-r4a-operator-check', () => {
     [['preview', '--git-branch', '--', 'feat/x']],
     [['preview', '--git-branch', '--']],
     [['preview', '--git-branch=-x']],
+    [['preview', '--git-branch=feat/x', '--preview-approved']],
+    [['preview-apply', '--git-branch=feat/x']],
+    [['preview-apply', '--preview-approved']],
+    [['preview-apply', '--preview-approved', '--git-branch=feat/x']],
+    [['preview-apply', '--git-branch=feat/x', '--preview-approved', '--apply']],
+    [['preview-apply', '--git-branch=feat/x', '--production-approved']],
+    [['production-apply', '--preview-approved']],
+    [['production', '--preview-approved']],
     [[]],
   ])('refuses unsupported arguments %j', async (args) => {
     await expectRefusal(deps(prodFiles), args, 'usage:');
@@ -264,7 +287,17 @@ describe('db-r4a-operator-check', () => {
   it('accepts a single separator right after the profile', () => {
     expect(parseR4aOperatorArgs(['production', '--'])).toEqual({
       profile: 'production',
+      mode: 'check',
     });
+    expect(
+      parseR4aOperatorArgs([
+        'preview-apply',
+        '--',
+        '--git-branch',
+        'feat/x',
+        '--preview-approved',
+      ]),
+    ).toEqual({ profile: 'preview', mode: 'apply', gitBranch: 'feat/x' });
   });
 
   it('scrubs the Neon API key from a provider error and does not connect', async () => {
@@ -273,6 +306,57 @@ describe('db-r4a-operator-check', () => {
       new Error(`Neon API returned 500: echoed ${SECRET}-api`),
     );
     await expectRefusal(d, ['production'], 'Neon identity lookup failed');
+  });
+
+  it('applies schema A only to the verified, explicitly approved Preview branch', async () => {
+    const d = deps(previewFiles);
+    await runR4aOperatorCheck(APPLY_ARGS, d.value);
+    expect(d.runApply).toHaveBeenCalledExactlyOnceWith(PREVIEW_URL);
+    expect(d.runCheck).not.toHaveBeenCalled();
+  });
+
+  it('a plain Preview check never applies', async () => {
+    const d = deps(previewFiles);
+    await runR4aOperatorCheck(PREVIEW_ARGS, d.value);
+    expect(d.runApply).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'a Production URL in the Preview file',
+      {
+        ...previewFiles,
+        '.env.preview.local': `DATABASE_URL_UNPOOLED=${PROD_URL}`,
+      },
+      'not a direct endpoint',
+    ],
+    ['an unknown Preview branch', previewFiles, 'was not found'],
+  ])('refuses Preview apply for %s', async (_case, files, message) => {
+    const args =
+      message === 'was not found'
+        ? ['preview-apply', '--git-branch=feat/unknown', '--preview-approved']
+        : APPLY_ARGS;
+    await expectRefusal(deps(files), args, message);
+  });
+
+  it('refuses Preview apply when the selection resolves to the Production branch', async () => {
+    const d = deps(previewFiles);
+    vi.mocked(d.value.listBranches).mockResolvedValue([
+      {
+        id: R4A_PRODUCTION_TARGET.branchId,
+        name: 'preview/feat/x',
+        created_at: '',
+      },
+    ]);
+    await expectRefusal(d, APPLY_ARGS, 'not a Preview branch');
+  });
+
+  it('refuses Preview apply with a shell DATABASE_URL_UNPOOLED', async () => {
+    await expectRefusal(
+      deps(previewFiles, { DATABASE_URL_UNPOOLED: PREVIEW_URL }),
+      APPLY_ARGS,
+      'set in the shell',
+    );
   });
 
   it('does not connect when the Neon API lookup fails', async () => {
@@ -284,5 +368,29 @@ describe('db-r4a-operator-check', () => {
       '401',
     );
     expect(d.runCheck).not.toHaveBeenCalled();
+  });
+});
+
+describe('default executor wiring (OZI-219)', () => {
+  it('Preview apply runs the typed standard apply and never forges the Production approval token', async () => {
+    await defaultR4aOperatorDeps().runApply(PREVIEW_URL);
+
+    expect(compactIndexes.runR4aCompactIndexCommand).toHaveBeenCalledWith(
+      { mode: 'apply' },
+      PREVIEW_URL,
+    );
+    expect(compactIndexes.runR4aCompactIndexesCli).not.toHaveBeenCalled();
+    expect(
+      JSON.stringify(compactIndexes.runR4aCompactIndexCommand.mock.calls),
+    ).not.toContain('production-approved');
+  });
+
+  it('check stays the read-only --check argv', async () => {
+    await defaultR4aOperatorDeps().runCheck(PREVIEW_URL);
+
+    expect(compactIndexes.runR4aCompactIndexesCli).toHaveBeenCalledWith(
+      ['--check'],
+      PREVIEW_URL,
+    );
   });
 });

@@ -21,7 +21,7 @@ type TrustedProviderScope =
   | { projectId: string; provider: 'neon' }
   | { owner: string; provider: 'github'; repository: string };
 
-interface NeonBranch {
+export interface NeonBranch {
   created_at: string;
   default?: boolean;
   id: string;
@@ -95,7 +95,7 @@ async function readBoundedResponseBody(
   return new TextDecoder().decode(bytes);
 }
 
-interface NeonConfig {
+export interface NeonConfig {
   apiKey: string;
   branchLimit: number;
   projectId: string;
@@ -180,7 +180,7 @@ function canonicalNeonEndpointHost(host: string): string {
   return [canonicalFirstLabel, ...remainingLabels].join('.');
 }
 
-async function getBranchEndpointHosts(
+export async function getBranchEndpointHosts(
   config: NeonConfig,
   branchId: string,
 ): Promise<string[]> {
@@ -362,7 +362,7 @@ async function neonRequest<T>(
   return (await response.json()) as T;
 }
 
-async function listBranches(config: NeonConfig): Promise<NeonBranch[]> {
+export async function listBranches(config: NeonConfig): Promise<NeonBranch[]> {
   const pathname = `/api/v2/projects/${config.projectId}/branches`;
   const result = await neonRequest<NeonBranchesResponse>(
     config,

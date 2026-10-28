@@ -159,7 +159,9 @@
     "test:all:coverage": "vitest run --config vitest.config.ts --coverage",
     "test:storybook:coverage": "vitest run --project storybook --coverage",
     "db:ownership-disposition": "tsx scripts/db-ownership-disposition-gate.ts",
-    "db:ownership-disposition:local": "node --env-file=.env.production --import tsx scripts/db-ownership-disposition-gate.ts"
+    "db:ownership-disposition:local": "node --env-file=.env.production --import tsx scripts/db-ownership-disposition-gate.ts",
+    "db:r4a:check:prod": "node --import tsx scripts/db-r4a-operator-check.ts production",
+    "db:r4a:check:preview": "node --import tsx scripts/db-r4a-operator-check.ts preview"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [

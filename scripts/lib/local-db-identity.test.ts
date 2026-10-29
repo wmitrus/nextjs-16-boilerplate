@@ -75,4 +75,29 @@ describe('readLocalDbSystemIdentifier', () => {
       expect(spawn).not.toHaveBeenCalled();
     },
   );
+
+  it('reads the identity inside an explicitly named CI service container', () => {
+    vi.stubEnv('DB_COMPOSE_ENGINE', 'docker');
+    vi.stubEnv('R4A_LOCAL_DB_CONTAINER', '0a1b2c3d4e5f');
+    const spawn = spawnReturning({ status: 0, stdout: '7\n' });
+
+    expect(readLocalDbSystemIdentifier('test', spawn)).toBe('7');
+    expect(spawn.mock.calls[0]![0]).toBe('docker');
+    expect(spawn.mock.calls[0]![1].slice(0, 2)).toEqual([
+      'exec',
+      '0a1b2c3d4e5f',
+    ]);
+  });
+
+  it.each(['-h 127.0.0.1', 'a b', '--privileged', ''.padEnd(129, 'a')])(
+    'refuses a malformed container override %j without spawning',
+    (override) => {
+      vi.stubEnv('R4A_LOCAL_DB_CONTAINER', override);
+      const spawn = spawnReturning();
+      expect(() => readLocalDbSystemIdentifier('test', spawn)).toThrow(
+        /BLOCKED: R4A_LOCAL_DB_CONTAINER is not a container name or id/,
+      );
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
 });

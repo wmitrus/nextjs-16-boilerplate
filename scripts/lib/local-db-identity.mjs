@@ -14,6 +14,14 @@ export const LOCAL_DB_CONTAINERS = new Map([
   ['test', { container: 'nextjs16_test_db', database: 'app_test' }],
 ]);
 
+/**
+ * CI runs the test database as a GitHub Actions service container, whose id
+ * the workflow passes here (`${{ job.services.<id>.id }}`). The identity is
+ * still read by exec inside that local container, never via the URL.
+ */
+const CONTAINER_OVERRIDE_ENV = 'R4A_LOCAL_DB_CONTAINER';
+const CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+
 const SYSTEM_IDENTIFIER_SQL =
   'SELECT system_identifier::text FROM pg_control_system()';
 
@@ -34,13 +42,19 @@ function containerEngines() {
 export function readLocalDbSystemIdentifier(target, spawn = spawnSync) {
   const profile = LOCAL_DB_CONTAINERS.get(target);
   if (!profile) throw new Error(`[db-identity] unknown target: ${target}`);
+  const override = process.env.R4A_LOCAL_DB_CONTAINER?.trim();
+  if (override && !CONTAINER_NAME_PATTERN.test(override))
+    throw new Error(
+      `[db-identity] BLOCKED: ${CONTAINER_OVERRIDE_ENV} is not a container name or id.`,
+    );
+  const container = override || profile.container;
 
   for (const bin of containerEngines()) {
     const result = spawn(
       bin,
       [
         'exec',
-        profile.container,
+        container,
         'psql',
         '-U',
         'postgres',
@@ -57,7 +71,7 @@ export function readLocalDbSystemIdentifier(target, spawn = spawnSync) {
 
   throw new Error(
     `[db-identity] BLOCKED: cannot read the cluster identity inside the local ` +
-      `container ${profile.container}; the ${target} target cannot be proven ` +
+      `container ${container}; the ${target} target cannot be proven ` +
       `local. Start it with \`pnpm db:${target}:up\`.`,
   );
 }

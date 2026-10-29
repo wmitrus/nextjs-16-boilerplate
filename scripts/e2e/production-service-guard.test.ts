@@ -5,10 +5,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   assertE2EServerIsolatedFromProductionServices,
+  E2E_BUILD_ORIGIN_FILE,
   findLeakedProductionServiceEnv,
   PRODUCTION_SERVICE_ENV_OVERRIDES,
 } from '../../e2e/production-service-guard';
@@ -40,7 +41,14 @@ const productionProfile = {
 };
 const baseEnv = { PATH: process.env.PATH ?? '' };
 
+// Config imports would otherwise serve (and so verify) the repo's own `.next`
+// whenever the unit suite itself runs with CI=true.
+beforeEach(() => {
+  vi.stubEnv('CI', '');
+});
+
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of dirs.splice(0))
     fs.rmSync(path.resolve(dir), { recursive: true });
 });
@@ -130,17 +138,51 @@ describe('E2E production-service guard', () => {
     ).not.toThrow();
   });
 
-  it('accepts a clean build', () => {
+  const LOCAL = 'http://localhost:3100';
+  const localEnv = {
+    ...baseEnv,
+    ...PRODUCTION_SERVICE_ENV_OVERRIDES,
+    NEXT_PUBLIC_APP_URL: LOCAL,
+  };
+
+  it('accepts a clean build made by e2e:build for this origin', () => {
+    const dir = project({
+      '.next/static/chunks/app.js': 'init({dsn:undefined})',
+      [E2E_BUILD_ORIGIN_FILE]: `${LOCAL}`,
+    });
+
+    expect(() =>
+      assertE2EServerIsolatedFromProductionServices(localEnv, {
+        dir,
+        serveBuild: true,
+      }),
+    ).not.toThrow();
+  });
+
+  it('blocks next start on a clean build not made by e2e:build', () => {
     const dir = project({
       '.next/static/chunks/app.js': 'init({dsn:undefined})',
     });
 
     expect(() =>
-      assertE2EServerIsolatedFromProductionServices(
-        { ...baseEnv, ...PRODUCTION_SERVICE_ENV_OVERRIDES },
-        { dir, serveBuild: true },
-      ),
-    ).not.toThrow();
+      assertE2EServerIsolatedFromProductionServices(localEnv, {
+        dir,
+        serveBuild: true,
+      }),
+    ).toThrow(/BLOCKED: .*not made by `pnpm e2e:build`/);
+  });
+
+  it('blocks next start on a build made for another loopback origin (port or host)', () => {
+    for (const builtFor of ['http://localhost:3200', 'http://127.0.0.1:3100']) {
+      const dir = project({ [E2E_BUILD_ORIGIN_FILE]: builtFor });
+
+      expect(() =>
+        assertE2EServerIsolatedFromProductionServices(localEnv, {
+          dir,
+          serveBuild: true,
+        }),
+      ).toThrow(/for this E2E base URL \(http:\/\/localhost:3100\)/);
+    }
   });
 });
 
@@ -173,6 +215,29 @@ describe('playwright.vscode.config wiring (OZI-219)', () => {
 describe('log-shipping, e-mail and app-URL vectors (OZI-219)', () => {
   const PROD_APP_URL = 'https://prod-app.example.com';
   const env = { ...baseEnv, ...PRODUCTION_SERVICE_ENV_OVERRIDES };
+
+  it('blocks New Relic server and browser agent activation from the env files', () => {
+    const dir = project({
+      '.env.local': `NEW_RELIC_ENABLED=true\nNEW_RELIC_LICENSE_KEY=${FAKE_TOKEN}\nNEW_RELIC_BROWSER_ENABLED=true\nNEW_RELIC_BROWSER_LICENSE_KEY=${FAKE_TOKEN}\n`,
+      '.env.production.local': `NEW_RELIC_LICENSE_KEY=${FAKE_TOKEN}\n`,
+    });
+
+    expect(findLeakedProductionServiceEnv(baseEnv, dir)).toEqual(
+      expect.arrayContaining([
+        'next dev: NEW_RELIC_ENABLED',
+        'next dev: NEW_RELIC_LICENSE_KEY',
+        'next dev: NEW_RELIC_BROWSER_ENABLED',
+        'next dev: NEW_RELIC_BROWSER_LICENSE_KEY',
+        'next start: NEW_RELIC_LICENSE_KEY',
+      ]),
+    );
+    expect(() =>
+      assertE2EServerIsolatedFromProductionServices(env, {
+        dir,
+        serveBuild: false,
+      }),
+    ).not.toThrow();
+  });
 
   it('blocks log-shipping and e-mail credentials from the env files', () => {
     const dir = project({
@@ -246,6 +311,8 @@ describe('isolated E2E build (OZI-219)', () => {
 
   function fakeSpawn(writeArtifact?: (dir: string) => void, status = 0) {
     return vi.fn((_cmd: string, _args: string[], opts: { cwd: string }) => {
+      if (status === 0)
+        fs.mkdirSync(path.join(opts.cwd, '.next'), { recursive: true });
       writeArtifact?.(opts.cwd);
       return { status };
     }) as unknown as typeof spawnSync & ReturnType<typeof vi.fn>;
@@ -263,6 +330,50 @@ describe('isolated E2E build (OZI-219)', () => {
       ...PRODUCTION_SERVICE_ENV_OVERRIDES,
       NEXT_PUBLIC_APP_URL: 'http://localhost:3100',
     });
+  });
+
+  it('marks the verified build with its origin; Playwright on the same custom port accepts it', async () => {
+    const dir = project(prodFiles);
+    const custom = {
+      ...baseEnv,
+      PLAYWRIGHT_TEST_BASE_URL: 'http://127.0.0.1:3200',
+    };
+
+    runE2EBuild(custom, dir, fakeSpawn());
+
+    expect(fs.readFileSync(path.join(dir, E2E_BUILD_ORIGIN_FILE), 'utf8')).toBe(
+      'http://127.0.0.1:3200',
+    );
+    vi.stubEnv('PLAYWRIGHT_TEST_BASE_URL', 'http://127.0.0.1:3200');
+    vi.resetModules();
+    const { default: config } = await import('../../playwright.config');
+    const { env } = config.webServer as { env: Record<string, string> };
+    expect(() =>
+      assertE2EServerIsolatedFromProductionServices(env, {
+        dir,
+        serveBuild: true,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertE2EServerIsolatedFromProductionServices(
+        { ...env, NEXT_PUBLIC_APP_URL: 'http://localhost:3100' },
+        { dir, serveBuild: true },
+      ),
+    ).toThrow(/not made by `pnpm e2e:build` for this E2E base URL/);
+  });
+
+  it('does not mark a build that failed the artifact scan', () => {
+    const dir = project(prodFiles);
+    const spawn = fakeSpawn((cwd) => {
+      fs.mkdirSync(path.join(cwd, '.next/static/chunks'), { recursive: true });
+      fs.writeFileSync(
+        path.join(cwd, '.next/static/chunks/app.js'),
+        `init({dsn:"${FAKE_DSN}"})`,
+      );
+    });
+
+    expect(() => runE2EBuild({ ...baseEnv }, dir, spawn)).toThrow(/BLOCKED/);
+    expect(fs.existsSync(path.join(dir, E2E_BUILD_ORIGIN_FILE))).toBe(false);
   });
 
   it('is BLOCKED before the build for a remote base URL', () => {

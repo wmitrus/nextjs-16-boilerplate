@@ -183,9 +183,13 @@ executor (`CONCURRENTLY` on real PostgreSQL, a plain build on PGlite). It
 first repeats the OZI-213 step for `feature_flags` and `audit_log_settings`
 only (validate the ownership CHECK when the gate plans it; never
 `audit_events`). It is idempotent and fails closed on any other decision
-(`blocked-by-disposition`, `blocked-by-schema-drift`, INVALID index). It
-never drops anything. An existing migration-only local database upgrades on
-its next `db:*:migrate`.
+(`blocked-by-disposition`, `blocked-by-schema-drift`, INVALID index). Both
+tables are checked read-only before the first VALIDATE or CREATE, so a
+blocked second table leaves the first untouched. That is not atomicity:
+`CREATE INDEX CONCURRENTLY` cannot run in a transaction, so a failure between
+tables can still leave one done, and a re-run converges. It never drops
+anything, and `runMigrations` refuses it under `NODE_ENV=production`. An
+existing migration-only local database upgrades on its next `db:*:migrate`.
 
 **Target identity.** A loopback hostname is not proof that a database is
 local: a tunnel or port-forward can put a remote cluster behind `127.0.0.1`.

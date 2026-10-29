@@ -87,17 +87,49 @@ export async function assertR4aBootstrapTargetIdentity(
     );
 }
 
-async function settleR4aOwnershipChecks(runner: SqlRunner): Promise<void> {
+/**
+ * Read-only preflight of BOTH R4a tables before the first mutation (VALIDATE
+ * or CREATE): a table that is blocked, drifted or holds an INVALID compact
+ * index refuses the whole bootstrap before any DDL. Returns the CHECKs to
+ * validate. This narrows partial progress, it does not make the bootstrap
+ * atomic: CREATE INDEX CONCURRENTLY cannot run in a transaction, so a failure
+ * between tables (or a concurrent writer) can still leave one table done --
+ * a re-run converges idempotently.
+ */
+async function preflightR4aSchemaA(
+  runner: SqlRunner,
+): Promise<readonly { table: string; constraint: string }[]> {
+  const toValidate: { table: string; constraint: string }[] = [];
   for (const { table } of R4A_COMPACT_INDEX_SPECS) {
-    const evidence = await gatherOwnershipDispositionTableEvidence(
-      runner,
-      table,
-    );
-    if (evidence.plannedAction === 'validate-constraint')
-      await runner.query(
-        `ALTER TABLE "public"."${table}" VALIDATE CONSTRAINT "${evidence.constraint.name}"`,
+    const { plannedAction, constraint } =
+      await gatherOwnershipDispositionTableEvidence(runner, table);
+    const { decision, target } = await inspectR4aCompactIndex(runner, table);
+    // Before VALIDATE the inspector reports blocked-by-disposition; it has
+    // already ruled out schema drift, so only an INVALID index remains.
+    const ready =
+      plannedAction === 'no-op'
+        ? decision === 'already-converged' || decision === 'eligible-to-create'
+        : plannedAction === 'validate-constraint' &&
+          decision === 'blocked-by-disposition' &&
+          (!target.exists ||
+            (target.valid === true &&
+              target.ready === true &&
+              target.live === true));
+    if (!ready)
+      throw new R4aCompactIndexExecutorError(
+        `${table} is ${plannedAction}/${decision}; schema A bootstrap refused before any DDL`,
       );
+    if (plannedAction === 'validate-constraint')
+      toValidate.push({ table, constraint: constraint.name });
   }
+  return toValidate;
+}
+
+async function settleR4aOwnershipChecks(runner: SqlRunner): Promise<void> {
+  for (const { table, constraint } of await preflightR4aSchemaA(runner))
+    await runner.query(
+      `ALTER TABLE "public"."${table}" VALIDATE CONSTRAINT "${constraint}"`,
+    );
 }
 
 /**

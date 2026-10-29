@@ -86,7 +86,9 @@ function toStoredDto(
   return {
     id: row.id,
     category: row.category,
-    tenantId: row.tenantId,
+    // OZI-219: a global row's tenant_id is only a frozen retention-compat
+    // shadow (R4a-B never rewrites it), never part of the global DTO.
+    tenantId: source === 'global' ? null : row.tenantId,
     source,
     enabled: row.enabled,
     retentionDays: row.retentionDays,

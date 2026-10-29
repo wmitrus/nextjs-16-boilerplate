@@ -307,7 +307,11 @@ function newRuntimeContract() {
   it('organization DO UPDATE keeps a historical shadow tenant_id; retention compat still resolves it', async () => {
     await seedSetting('legacy-tenant-a1', ORG_A1, 'canonical_organization');
     await newOrg(120, ORG_A1, TENANT_A);
-    await newOrg(150, ORG_A1, TENANT_A);
+    // tenant-override DTO keeps exposing the row's shadow, as before R4a-B.
+    await expect(newOrg(150, ORG_A1, TENANT_A)).resolves.toMatchObject({
+      source: 'tenant-override',
+      tenantId: 'legacy-tenant-a1',
+    });
     expect(await settings()).toMatchObject([
       { tenant_id: 'legacy-tenant-a1', retention_days: 150 },
     ]);
@@ -316,9 +320,29 @@ function newRuntimeContract() {
     ).resolves.toMatchObject({ retentionDays: 150 });
   });
 
-  it('global DO UPDATE keeps a historical shadow tenant_id', async () => {
+  it('global DO UPDATE keeps a historical shadow tenant_id but never exposes it in the DTO', async () => {
     await seedSetting('legacy-global', null, 'intentional_global');
-    await newGlobal(200);
+    // DTO: a global setting carries no tenant, as before R4a-B.
+    await expect(newGlobal(200)).resolves.toMatchObject({
+      source: 'global',
+      tenantId: null,
+      retentionDays: 200,
+    });
+    await expect(svc.list(globalScope)).resolves.toContainEqual(
+      expect.objectContaining({
+        category: CATEGORY,
+        source: 'global',
+        tenantId: null,
+      }),
+    );
+    await expect(svc.list(orgScope(ORG_A1, TENANT_A))).resolves.toContainEqual(
+      expect.objectContaining({
+        category: CATEGORY,
+        source: 'global',
+        tenantId: null,
+      }),
+    );
+    // Stored shadow: physically untouched.
     expect(await settings()).toMatchObject([
       {
         tenant_id: 'legacy-global',
@@ -326,6 +350,10 @@ function newRuntimeContract() {
         retention_days: 200,
       },
     ]);
+    // Retention compat: the historical key still resolves the updated row.
+    await expect(
+      resolveLegacyAuditRetentionCompat(db, CATEGORY, 'legacy-global'),
+    ).resolves.toMatchObject({ retentionDays: 200 });
   });
 
   it.each(['unresolved_legacy', 'quarantined'])(

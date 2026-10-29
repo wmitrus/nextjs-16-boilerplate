@@ -27,6 +27,8 @@ import {
  *    neither a Sentry DSN nor a non-loopback NEXT_PUBLIC_APP_URL taken from
  *    the env files (on 2026-10-28 such a build forwarded local edge logs to
  *    Production `/api/logs`, i.e. Production Upstash and Logflare).
+ * 3. that build was made by `pnpm e2e:build` for this very origin (a build
+ *    for another loopback port would send edge logs to the wrong server).
  *
  * Only key and file names are ever reported, never values.
  */
@@ -48,6 +50,14 @@ export const PRODUCTION_SERVICE_ENV_KEYS: readonly string[] = [
   'SMTP_HOST',
   'SMTP_USER',
   'SMTP_PASS',
+  // New Relic: the server agent (newrelic.js, server-init.ts, `-r newrelic`)
+  // reports only with ENABLED=true AND a license key -- both pinned, since
+  // env.ts rejects ENABLED=true without a key. The browser agent is its own
+  // pair (layout script + beacon).
+  'NEW_RELIC_ENABLED',
+  'NEW_RELIC_LICENSE_KEY',
+  'NEW_RELIC_BROWSER_ENABLED',
+  'NEW_RELIC_BROWSER_LICENSE_KEY',
 ];
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -62,7 +72,19 @@ function isLoopbackUrl(value: string): boolean {
 
 export type ServerEnv = Readonly<Record<string, string | undefined>>;
 
-export const E2E_DEFAULT_BASE_URL = 'http://localhost:3100';
+const E2E_DEFAULT_BASE_URL = 'http://localhost:3100';
+
+/** The one base URL both `pnpm e2e:build` and Playwright resolve. */
+export function resolveE2EBaseURL(env: ServerEnv): string {
+  return env.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL;
+}
+
+/**
+ * Written by `pnpm e2e:build` into `.next`: the origin baked into the build
+ * as NEXT_PUBLIC_APP_URL. `next build` empties `.next`, so any other build
+ * has no marker.
+ */
+export const E2E_BUILD_ORIGIN_FILE = path.join('.next', 'e2e-base-origin');
 
 /**
  * The isolated env for an E2E web server or E2E build: every outbound-service
@@ -216,5 +238,14 @@ export function assertE2EServerIsolatedFromProductionServices(
     throw new Error(
       `[e2e-guard] BLOCKED: the build served by \`next start\` inlines a Sentry DSN or a non-loopback NEXT_PUBLIC_APP_URL (${inlined.length} file(s), e.g. ${inlined[0]}). ` +
         'Rebuild it with the E2E env (empty service keys, loopback NEXT_PUBLIC_APP_URL) before running E2E.',
+    );
+  const marker = path.resolve(dir, E2E_BUILD_ORIGIN_FILE);
+  const builtFor = pathExistsWithinBase(marker, dir, 'E2E build marker')
+    ? readTextFileWithinBase(marker, dir, 'E2E build marker').trim()
+    : undefined;
+  if (builtFor !== serverEnv.NEXT_PUBLIC_APP_URL)
+    throw new Error(
+      `[e2e-guard] BLOCKED: the build served by \`next start\` was not made by \`pnpm e2e:build\` for this E2E base URL (${serverEnv.NEXT_PUBLIC_APP_URL}). ` +
+        'Rebuild with `pnpm e2e:build` and the same PLAYWRIGHT_TEST_BASE_URL.',
     );
 }

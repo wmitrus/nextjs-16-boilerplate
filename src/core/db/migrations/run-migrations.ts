@@ -128,6 +128,17 @@ export async function runMigrations(
         options.postgresUrl,
         'runMigrations convergence',
       );
+      // migrate-cli never requests the bootstrap in production; refuse any
+      // other caller that does, before the migrator writes.
+      if (
+        options.r4aSchemaA === 'bootstrap' &&
+        process.env.NODE_ENV === 'production'
+      ) {
+        throw new Error(
+          '[runMigrations] the R4a-A schema bootstrap is non-Production only ' +
+            'and refuses NODE_ENV=production.',
+        );
+      }
       if (
         options.r4aSchemaA === 'bootstrap' &&
         !isLocalR4aBootstrapTarget(options.postgresUrl)

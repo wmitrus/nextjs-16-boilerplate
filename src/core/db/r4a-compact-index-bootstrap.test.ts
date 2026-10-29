@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runMigrations } from './migrations/run-migrations';
 import {
@@ -11,6 +11,10 @@ import type { R4aCompactIndexExecutorRunner } from './r4a-compact-index-executor
 import type { DrizzleDb } from './types';
 
 describe('R4a schema A bootstrap target guard (OZI-219)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it.each([
     'postgres://u:p@127.0.0.1:5433/app_test',
     'postgres://u:p@localhost:5432/app_dev',
@@ -56,6 +60,21 @@ describe('R4a schema A bootstrap target guard (OZI-219)', () => {
       }),
     ).rejects.toThrow('a loopback hostname is not proof');
   });
+  it('runMigrations refuses a bootstrap under NODE_ENV=production before any query, even with a valid local proof', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const execute = vi.fn(() => {
+      throw new Error('the migrator must not run');
+    });
+    await expect(
+      runMigrations({ execute } as unknown as DrizzleDb, 'postgres', {
+        postgresUrl: 'postgres://u:p@127.0.0.1:5433/app_test',
+        r4aSchemaA: 'bootstrap',
+        r4aTargetSystemIdentifier: '7619451615054913566',
+      }),
+    ).rejects.toThrow('refuses NODE_ENV=production');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('runMigrations refuses a localhost tunnel to another cluster before the migrator runs', async () => {
     const executed: string[] = [];
     const db = {

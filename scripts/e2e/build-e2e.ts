@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   assertE2EServerIsolatedFromProductionServices,
-  E2E_DEFAULT_BASE_URL,
+  E2E_BUILD_ORIGIN_FILE,
   e2eIsolatedEnv,
   findProductionTargetsInBuild,
+  resolveE2EBaseURL,
   type ServerEnv,
 } from '../../e2e/production-service-guard';
 
@@ -17,17 +20,15 @@ import {
  *
  * 1. BLOCKED before the build unless `@next/env` proves that env isolated;
  * 2. BLOCKED after the build if the artifacts still inline a Sentry DSN or a
- *    non-loopback app URL (independent second layer; `next start` repeats it).
+ *    non-loopback app URL (independent second layer; `next start` repeats it);
+ * 3. a verified build is marked with its origin, which `next start` must match.
  */
 export function runE2EBuild(
   baseEnv: ServerEnv = process.env,
   dir: string = process.cwd(),
   spawn: typeof spawnSync = spawnSync,
 ): void {
-  const env = e2eIsolatedEnv(
-    baseEnv,
-    baseEnv.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL,
-  );
+  const env = e2eIsolatedEnv(baseEnv, resolveE2EBaseURL(baseEnv));
   assertE2EServerIsolatedFromProductionServices(env, {
     dir,
     serveBuild: false,
@@ -46,6 +47,13 @@ export function runE2EBuild(
     throw new Error(
       `[e2e-build] BLOCKED: the E2E build still inlines a production target (${inlined.length} file(s), e.g. ${inlined[0]}).`,
     );
+
+  // Only a verified build is marked; `next start` refuses any other origin.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed relative path under <dir>/.next
+  fs.writeFileSync(
+    path.resolve(dir, E2E_BUILD_ORIGIN_FILE),
+    env.NEXT_PUBLIC_APP_URL,
+  );
 }
 
 if (process.argv[1]?.endsWith('/scripts/e2e/build-e2e.ts')) {

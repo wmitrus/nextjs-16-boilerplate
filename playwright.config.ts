@@ -3,8 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 import { resolveInternalApiKey } from './e2e/internal-api-key';
 import {
   assertE2EServerIsolatedFromProductionServices,
-  E2E_DEFAULT_BASE_URL,
   e2eIsolatedEnv,
+  resolveE2EBaseURL,
 } from './e2e/production-service-guard';
 
 function parseBoolean(value: string | undefined): boolean | undefined {
@@ -19,7 +19,7 @@ function parseBoolean(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
-const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL;
+const baseURL = resolveE2EBaseURL(process.env);
 const resolvedBaseURL = new URL(baseURL);
 const basePort =
   resolvedBaseURL.port ||

@@ -68,7 +68,7 @@ Local env files hold real outbound-service credentials. `next dev` loads `.env.l
 
 Every E2E web server (`playwright.config.ts`, `playwright.vscode.config.ts`) and every E2E build gets its env from `e2eIsolatedEnv` in `e2e/production-service-guard.ts`:
 
-- The Sentry, Upstash, Logflare, Better Stack and e-mail keys are pinned empty. `EMAIL_PROVIDER` falls back to `none`.
+- The Sentry, Upstash, Logflare, Better Stack, e-mail and New Relic (server and browser agent: `*_ENABLED` and `*_LICENSE_KEY`) keys are pinned empty. `EMAIL_PROVIDER` falls back to `none`.
 - `NEXT_PUBLIC_APP_URL` is pinned to the scenario base URL. A non-loopback base URL is refused.
 
 This works because `@next/env` never overrides a key already present in the process env, and `env.ts` treats an empty value as unset.
@@ -78,7 +78,9 @@ This works because `@next/env` never overrides a key already present in the proc
 - before the build, if Next's own `@next/env` shows any outbound key or a non-loopback app URL would still be loaded;
 - after the build, if `.next/static` or `.next/server` inlines a Sentry DSN or a non-loopback `NEXT_PUBLIC_APP_URL` from the env files.
 
-**Before any web server starts,** the guard checks the env again for both `next dev` and `next start`. In `CI` mode, where `next start` serves the existing build, it repeats the artifact scan. Errors name keys and files only, never values.
+A build that passes both is marked with its origin (`.next/e2e-base-origin`). Both `pnpm e2e:build` and Playwright resolve the base URL the same way (`PLAYWRIGHT_TEST_BASE_URL`, default `http://localhost:3100`), so set the same value for both when you use another port.
+
+**Before any web server starts,** the guard checks the env again for both `next dev` and `next start`. In `CI` mode, where `next start` serves the existing build, it repeats the artifact scan and requires the marker to match this run's origin; a plain `pnpm build`, or a build for another port or host, is refused. Errors name keys and files only, never values.
 
 ## Runtime Profiles And Scenario Model
 

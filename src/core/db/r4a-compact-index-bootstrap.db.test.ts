@@ -4,7 +4,16 @@ import { createServer, connect, type Server } from 'node:net';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  inject,
+  it,
+} from 'vitest';
 
 import { runMigrations } from './migrations/run-migrations';
 import { sqlRunnerFromDrizzle } from './post-migrate-steps';
@@ -146,49 +155,78 @@ describe('R4a schema A bootstrap on the shared test database', () => {
 describe('R4a schema A bootstrap on a migration-only database with unsettled ownership', () => {
   let preA: TestDb;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     preA = await resolveMigrationOnlyTestDb();
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await preA.cleanup();
   });
 
-  it('refuses with no DDL while an unresolved_legacy row blocks the R4a gate', async () => {
+  const attempt = async () => {
     const base = sqlRunnerFromDrizzle(preA.db, (text) => sql.raw(text));
-    await base.query(
-      `INSERT INTO feature_flags (key, tenant_id, ownership_state, enabled)
-       VALUES ('r4a-unsettled', 'legacy-1', 'unresolved_legacy', true)`,
-    );
-
-    const attempt = async () => {
-      if (!preA.url) return bootstrapR4aSchemaAPlain(base);
-      const { default: postgres } = await import('postgres');
-      const client = postgres(preA.url, { max: 1, prepare: false });
+    if (!preA.url) return bootstrapR4aSchemaAPlain(base);
+    const { default: postgres } = await import('postgres');
+    const client = postgres(preA.url, { max: 1, prepare: false });
+    try {
+      const session = await client.reserve();
       try {
-        const session = await client.reserve();
-        try {
-          return await bootstrapR4aSchemaAConcurrent(
-            r4aExecutorRunnerFromPostgres(session),
-            { expectedSystemIdentifier: preA.systemIdentifier ?? '' },
-          );
-        } finally {
-          session.release();
-        }
+        return await bootstrapR4aSchemaAConcurrent(
+          r4aExecutorRunnerFromPostgres(session),
+          { expectedSystemIdentifier: preA.systemIdentifier ?? '' },
+        );
       } finally {
-        await client.end({ timeout: 5 });
+        session.release();
       }
-    };
+    } finally {
+      await client.end({ timeout: 5 });
+    }
+  };
 
-    await expect(attempt()).rejects.toThrow(
-      /feature_flags is blocked-by-disposition/,
-    );
+  /** Neither table mutated: no compact unique, both R4a CHECKs NOT VALID. */
+  const expectNoSchemaAMutation = async () => {
+    const base = sqlRunnerFromDrizzle(preA.db, (text) => sql.raw(text));
     const compact = await base.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM pg_class
        WHERE relname IN ('uq_feature_flags_key_organization_compact',
                          'uq_audit_log_settings_category_organization_compact')`,
     );
     expect(compact[0]?.n).toBe(0);
+    const checks = await base.query<{ conname: string; convalidated: boolean }>(
+      `SELECT conname, convalidated FROM pg_constraint
+       WHERE conname IN ('ck_feature_flags_ownership_state_org',
+                         'ck_audit_log_settings_ownership_state_org')`,
+    );
+    expect(
+      Object.fromEntries(checks.map((row) => [row.conname, row.convalidated])),
+    ).toEqual({
+      ck_feature_flags_ownership_state_org: false,
+      ck_audit_log_settings_ownership_state_org: false,
+    });
+  };
+
+  it('refuses with no DDL while an unresolved_legacy row blocks the first table (feature_flags)', async () => {
+    await sqlRunnerFromDrizzle(preA.db, (text) => sql.raw(text)).query(
+      `INSERT INTO feature_flags (key, tenant_id, ownership_state, enabled)
+       VALUES ('r4a-unsettled', 'legacy-1', 'unresolved_legacy', true)`,
+    );
+
+    await expect(attempt()).rejects.toThrow(
+      /feature_flags is blocked-unsettled-rows\/.*refused before any DDL/,
+    );
+    await expectNoSchemaAMutation();
+  });
+
+  it('preflights both tables: a blocked second table (audit_log_settings) leaves the first untouched', async () => {
+    await sqlRunnerFromDrizzle(preA.db, (text) => sql.raw(text)).query(
+      `INSERT INTO audit_log_settings (category, tenant_id, ownership_state, enabled, retention_days)
+       VALUES ('auth', 'legacy-1', 'unresolved_legacy', true, 30)`,
+    );
+
+    await expect(attempt()).rejects.toThrow(
+      /audit_log_settings is blocked-unsettled-rows\/.*refused before any DDL/,
+    );
+    await expectNoSchemaAMutation();
   });
 });
 

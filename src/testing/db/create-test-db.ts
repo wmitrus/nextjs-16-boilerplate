@@ -10,11 +10,20 @@ import postgres from 'postgres';
 import { inject } from 'vitest';
 
 import { runMigrations } from '@/core/db/migrations/run-migrations';
+import {
+  bootstrapR4aSchemaAConcurrent,
+  isLocalR4aBootstrapTarget,
+} from '@/core/db/r4a-compact-index-bootstrap';
+import { r4aExecutorRunnerFromPostgres } from '@/core/db/r4a-compact-index-executor';
 import type { DbDriver, DrizzleDb } from '@/core/db/types';
 
 export interface TestDb {
   db: DrizzleDb;
   cleanup: () => Promise<void>;
+  /** Real-Postgres URL of a migration-only database, for suites needing a second session. */
+  url?: string;
+  /** Its cluster identity, read inside its container (R4a bootstrap proof). */
+  systemIdentifier?: string;
 }
 
 /**
@@ -71,6 +80,41 @@ export async function resolveTestDb(
   return createDbByDriver('pglite', undefined);
 }
 
+/**
+ * OZI-219 — a migration-only (pre-R4a-A) database for suites that assert the
+ * schema exactly as the migrations leave it (FF·A / AUD·A contracts: NOT
+ * VALID ownership CHECKs, several NULL-organization legacy rows per key).
+ * Schema A forbids those states, so they are never asserted on the shared
+ * schema-A fixture: PGlite gets a fresh instance without the bootstrap; a
+ * real-Postgres profile gets its own disposable Testcontainers database.
+ */
+export async function resolveMigrationOnlyTestDb(): Promise<TestDb> {
+  const usesPostgres =
+    Boolean(inject('TEST_DATABASE_URL')) ||
+    Boolean(process.env.TEST_DATABASE_URL?.trim());
+  if (!usesPostgres) return createPgliteTestDb({ r4aSchemaA: 'absent' });
+
+  const { startIsolatedPostgres } = await import('./isolated-postgres');
+  const isolated = await startIsolatedPostgres({ r4aSchemaA: 'absent' });
+  try {
+    const testDb = await createPostgresTestDb(isolated.url, {
+      r4aSchemaA: 'absent',
+    });
+    return {
+      db: testDb.db,
+      url: isolated.url,
+      systemIdentifier: isolated.systemIdentifier,
+      cleanup: async () => {
+        await testDb.cleanup();
+        await isolated.stop();
+      },
+    };
+  } catch (error) {
+    await isolated.stop();
+    throw error;
+  }
+}
+
 async function createDbByDriver(
   driver: DbDriver,
   url: string | undefined,
@@ -89,10 +133,20 @@ async function createDbByDriver(
   throw new Error(`[createTestDb] unsupported driver: ${String(driver)}`);
 }
 
-async function createPgliteTestDb(): Promise<TestDb> {
+interface SchemaAOption {
+  readonly r4aSchemaA: 'bootstrap' | 'absent';
+}
+
+async function createPgliteTestDb(
+  { r4aSchemaA }: SchemaAOption = { r4aSchemaA: 'bootstrap' },
+): Promise<TestDb> {
   const pglite = new PGlite('memory://', { extensions: { pg_trgm } });
   const db = drizzlePglite(pglite) as unknown as DrizzleDb;
-  await runMigrations(db, 'pglite');
+  await runMigrations(
+    db,
+    'pglite',
+    r4aSchemaA === 'bootstrap' ? { r4aSchemaA } : {},
+  );
 
   return {
     db,
@@ -102,7 +156,10 @@ async function createPgliteTestDb(): Promise<TestDb> {
   };
 }
 
-async function createPostgresTestDb(url: string): Promise<TestDb> {
+async function createPostgresTestDb(
+  url: string,
+  { r4aSchemaA }: SchemaAOption = { r4aSchemaA: 'bootstrap' },
+): Promise<TestDb> {
   const client = postgres(url, {
     max: 1,
     // Test isolation uses TRUNCATE ... CASCADE on the disposable test DB.
@@ -113,6 +170,7 @@ async function createPostgresTestDb(url: string): Promise<TestDb> {
   const db = drizzlePostgres(client) as unknown as DrizzleDb;
 
   await truncateAll(db);
+  if (r4aSchemaA === 'bootstrap') await ensureR4aSchemaA(client, url);
 
   return {
     db,
@@ -121,6 +179,38 @@ async function createPostgresTestDb(url: string): Promise<TestDb> {
       await client.end({ timeout: 5 });
     },
   };
+}
+
+/**
+ * OZI-219 — the shared database may have been rebuilt by an earlier file
+ * through the migrator alone (migration-transition suites), so every file
+ * starts in R4a schema A. Idempotent; on one pinned session for the executor.
+ *
+ * The identity proof is the cluster `system_identifier` the globalSetup read
+ * inside the container it controls (Testcontainers or the local compose
+ * test-db); without it, or on a mismatch, the bootstrap refuses.
+ */
+async function ensureR4aSchemaA(
+  client: postgres.Sql,
+  url: string,
+): Promise<void> {
+  if (!isLocalR4aBootstrapTarget(url))
+    throw new Error(
+      '[createTestDb] the R4a schema A bootstrap refuses a non-loopback test database',
+    );
+  const expectedSystemIdentifier =
+    (inject('TEST_DATABASE_SYSTEM_IDENTIFIER') as string | undefined) ??
+    process.env.TEST_DATABASE_SYSTEM_IDENTIFIER?.trim() ??
+    '';
+  const session = await client.reserve();
+  try {
+    await bootstrapR4aSchemaAConcurrent(
+      r4aExecutorRunnerFromPostgres(session),
+      { expectedSystemIdentifier },
+    );
+  } finally {
+    session.release();
+  }
 }
 
 async function truncateAll(db: DrizzleDb): Promise<void> {

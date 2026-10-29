@@ -76,10 +76,19 @@ function specFor(table: R4aCompactIndexTable) {
     throw new R4aCompactIndexExecutorError(`unsupported table: ${table}`);
   return spec;
 }
-function createSql(table: R4aCompactIndexTable): string {
+/**
+ * The one R4a-A index definition. `concurrently: false` exists only for the
+ * non-Production PGlite bootstrap, where CONCURRENTLY has no meaning.
+ */
+export function r4aCompactIndexCreateSql(
+  table: R4aCompactIndexTable,
+  { concurrently }: { readonly concurrently: boolean },
+): string {
   const spec = specFor(table);
-  return `CREATE UNIQUE INDEX CONCURRENTLY "${spec.index}" ON "public"."${table}" USING btree ("${spec.columns[0]}", "${spec.columns[1]}") NULLS NOT DISTINCT`;
+  return `CREATE UNIQUE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}"${spec.index}" ON "public"."${table}" USING btree ("${spec.columns[0]}", "${spec.columns[1]}") NULLS NOT DISTINCT`;
 }
+const createSql = (table: R4aCompactIndexTable) =>
+  r4aCompactIndexCreateSql(table, { concurrently: true });
 async function acquire(runner: R4aCompactIndexSqlRunner): Promise<void> {
   const rows = await runner.query<{ ok: boolean }>(
     `SELECT pg_try_advisory_lock(${R4A_COMPACT_INDEX_LOCK.namespace}, ${R4A_COMPACT_INDEX_LOCK.id}) AS ok`,

@@ -73,6 +73,7 @@ describe('assertVercelPreviewSourceUploadValid', () => {
         'package.json',
         'e2e/env-files.ts',
         'e2e/internal-api-key.ts',
+        'e2e/production-service-guard.ts',
         'src/core/db/migrations/generated/meta/_journal.json',
       ],
       ignored: [],
@@ -458,4 +459,23 @@ describe('assertNextRuntimeTraceGuardValid', () => {
       ).toThrow('must remain automatic');
     },
   );
+});
+
+describe('Preview source upload — E2E production-service guard (OZI-219)', () => {
+  it('rejects an upload without the guard imported by playwright.config.ts', () => {
+    const dryRunOutput = JSON.stringify({
+      files: [
+        'next.config.ts',
+        'package.json',
+        'e2e/env-files.ts',
+        'e2e/internal-api-key.ts',
+        'src/core/db/migrations/generated/meta/_journal.json',
+      ],
+      ignored: ['e2e/production-service-guard.ts'],
+    });
+
+    expect(() => assertVercelPreviewSourceUploadValid(dryRunOutput)).toThrow(
+      'e2e/production-service-guard.ts',
+    );
+  });
 });

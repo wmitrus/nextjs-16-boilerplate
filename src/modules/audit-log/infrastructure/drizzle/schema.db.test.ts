@@ -4,7 +4,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { auditEventsTable, auditLogSettingsTable } from './schema';
 
-import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
+import {
+  resolveMigrationOnlyTestDb,
+  type TestDb,
+} from '@/testing/db/create-test-db';
 
 /**
  * OZI-71 AUD·A — additive canonical ownership schema for `audit_events` and
@@ -38,7 +41,9 @@ const SUITE_TENANT_TAGS = [
 ] as const;
 
 beforeAll(async () => {
-  testDb = await resolveTestDb();
+  // OZI-219: this suite is the FF·A / AUD·A migration contract -- it asserts
+  // the migration-only (pre-R4a-A) schema, never the shared schema-A fixture.
+  testDb = await resolveMigrationOnlyTestDb();
 });
 
 afterEach(async () => {

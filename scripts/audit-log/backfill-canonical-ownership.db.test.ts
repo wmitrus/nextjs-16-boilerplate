@@ -1,15 +1,7 @@
 /** @vitest-environment node */
 import { asc, eq, sql } from 'drizzle-orm';
 import postgres from 'postgres';
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  inject,
-  it,
-} from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   runAuditOwnershipBackfill,
@@ -21,7 +13,10 @@ import {
   auditEventsTable,
   auditLogSettingsTable,
 } from '@/modules/audit-log/infrastructure/drizzle/schema';
-import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
+import {
+  resolveMigrationOnlyTestDb,
+  type TestDb,
+} from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
 
@@ -147,7 +142,10 @@ async function decisionsForApply(
 }
 
 beforeAll(async () => {
-  testDb = await resolveTestDb();
+  // OZI-219: this suite asserts pre-R4a-A states (NOT VALID ownership CHECKs,
+  // unsettled NULL-organization rows), which schema A forbids -- it runs on a
+  // migration-only database, never the shared schema-A fixture.
+  testDb = await resolveMigrationOnlyTestDb();
 
   await testDb.db.execute(
     sql`INSERT INTO tenants (id, name) VALUES
@@ -740,8 +738,8 @@ describe('AUD·C apply — transactional ownership mutation', () => {
   });
 
   it('falls back to quarantine when a canonical winner races the final UPDATE', async () => {
-    const injectedUrl = inject('TEST_DATABASE_URL') as string | undefined;
-    const url = injectedUrl ?? process.env.TEST_DATABASE_URL?.trim() ?? null;
+    // The racing session must reach this suite's migration-only database.
+    const url = testDb.url ?? null;
 
     if (!url) return;
 

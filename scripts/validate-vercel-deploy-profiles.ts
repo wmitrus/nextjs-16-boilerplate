@@ -14,6 +14,7 @@ const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'package.json',
   'e2e/env-files.ts',
   'e2e/internal-api-key.ts',
+  'e2e/production-service-guard.ts',
   'src/core/db/migrations/generated/meta/_journal.json',
 ];
 const PREBUILT_RUNTIME_PATHS = ['/.next', '/node_modules', '/src'];

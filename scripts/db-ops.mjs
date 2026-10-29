@@ -8,6 +8,7 @@ import {
   guardTestOperation,
   parsePostgresUrl,
 } from './lib/db-guard.mjs';
+import { readLocalDbSystemIdentifier } from './lib/local-db-identity.mjs';
 
 const VALID_TARGETS = ['dev', 'test'];
 const VALID_OPERATIONS = ['migrate', 'seed', 'reset', 'studio'];
@@ -82,12 +83,18 @@ function run(cmd, args, env) {
  * the child env so a stale/inherited remote `DATABASE_URL_UNPOOLED` (e.g.
  * exported in the shell from prod/preview work) can never win --
  * `migrate-cli.ts` prefers `DATABASE_URL_UNPOOLED` for `driver=postgres`.
+ *
+ * OZI-219: `systemIdentifier` is the cluster identity read inside the local
+ * compose container (`readLocalDbSystemIdentifier`); migrate-cli bootstraps
+ * R4a schema A only when the server behind `url` reports the same one. It is
+ * always pinned (empty when absent) so an inherited value can never leak in.
  */
-export function runMigrate(url) {
+export function runMigrate(url, systemIdentifier) {
   run('pnpm', ['exec', 'tsx', 'src/core/db/migrate-cli.ts'], {
     ...process.env,
     DATABASE_URL: url,
     DATABASE_URL_UNPOOLED: url,
+    R4A_LOCAL_SYSTEM_IDENTIFIER: systemIdentifier ?? '',
     DB_DRIVER: 'postgres',
     DB_PROVIDER: 'drizzle',
   });
@@ -173,7 +180,7 @@ async function main() {
   }
 
   if (operation === 'migrate') {
-    runMigrate(url);
+    runMigrate(url, readLocalDbSystemIdentifier(target));
     return;
   }
 
@@ -184,6 +191,8 @@ async function main() {
 
   if (operation === 'reset') {
     const parsed = parsePostgresUrl(url);
+    // Proven before the destructive reset, not after it.
+    const systemIdentifier = readLocalDbSystemIdentifier(target);
 
     if (!force) {
       const confirmed = await promptConfirm(
@@ -205,7 +214,7 @@ async function main() {
     runSchemaReset(url);
 
     process.stdout.write('[db-ops] Running migrations...\n');
-    runMigrate(url);
+    runMigrate(url, systemIdentifier);
 
     process.stdout.write('[db-ops] Running seed...\n');
     runSeed(url);

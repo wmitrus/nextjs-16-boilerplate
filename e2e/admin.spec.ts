@@ -2,28 +2,70 @@ import {
   test as base,
   expect,
   type APIRequestContext,
-  type BrowserContext,
   type Page,
 } from '@playwright/test';
 
 import {
-  captureAuthjsSessionStorageState,
   createAuthjsE2ECredentials,
   isAuthjsRuntime,
   provisionAuthjsE2EUser,
+  signInAuthjsE2E,
+  type AuthjsE2ECredentials,
 } from './authjs-auth';
+import {
+  captureSteppedUpAdminSession,
+  enrollTotp,
+  ensureFreshStepUp,
+  type SteppedUpAdminSession,
+} from './authjs-step-up';
+import { withLocalE2EDatabase } from './support/e2e-db';
 
 const isAuthjs = isAuthjsRuntime();
+
+/**
+ * The waitlist is platform-global (SEC-41): only an env-based platform admin
+ * may approve an entry, and the approval is audited at platform-global scope.
+ * `pnpm e2e:admin:audit-logs` lists this address in ADMIN_USER_EMAILS.
+ */
+const AUDIT_PLATFORM_ADMIN_EMAIL = 'e2e+authjs-audit-platform@example.com';
+
+/**
+ * Set by the CI workflow whose only job is the audit-settings suite (OZI-220).
+ * A misconfigured runtime there must fail loudly: the audit-trail block below
+ * skips itself without AuthJS or the db flag provider, and a green run that
+ * skipped proves nothing. Required step-up is part of that contract -- a
+ * production build refuses the bypass, so the suite must pass the real one.
+ */
+if (process.env.E2E_REQUIRE_AUDIT_SETTINGS_SUITE === 'true') {
+  const misconfigured = [
+    !isAuthjs && 'AUTH_PROVIDER=authjs',
+    process.env.FEATURE_FLAG_PROVIDER !== 'db' && 'FEATURE_FLAG_PROVIDER=db',
+    process.env.ADMIN_STEP_UP_MODE !== 'required' &&
+      'ADMIN_STEP_UP_MODE=required',
+    !(process.env.ADMIN_USER_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .includes(AUDIT_PLATFORM_ADMIN_EMAIL) &&
+      `ADMIN_USER_EMAILS=${AUDIT_PLATFORM_ADMIN_EMAIL}`,
+  ].filter(Boolean);
+  if (misconfigured.length > 0) {
+    throw new Error(
+      `[admin.spec] The audit-settings suite must run, but the runtime is missing: ${misconfigured.join(', ')}. Run it through \`pnpm e2e:admin:audit-logs\`.`,
+    );
+  }
+}
 const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3100';
-const test = base;
-type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 const authTest = base.extend<
   {
     authedPage: Page;
+    platformPage: Page;
   },
   {
     authRequest: APIRequestContext;
-    adminStorageState: SessionStorageState;
+    adminSession: SteppedUpAdminSession & {
+      credentials: AuthjsE2ECredentials;
+    };
+    platformAdminSession: SteppedUpAdminSession;
   }
 >({
   authRequest: [
@@ -34,27 +76,59 @@ const authTest = base.extend<
     },
     { scope: 'worker' },
   ],
-  adminStorageState: [
-    async ({ browser, authRequest }, runWithStorageState) => {
-      const authjsAdminCredentials = createAuthjsE2ECredentials('admin-shared');
-      await provisionAuthjsE2EUser(authRequest, authjsAdminCredentials);
-      const storageState = await captureAuthjsSessionStorageState(
-        browser,
-        authjsAdminCredentials,
-      );
-      await runWithStorageState(storageState);
+  // SEC-48: the shared admin enrolls a real TOTP factor and answers the
+  // real step-up challenge, so this suite runs with ADMIN_STEP_UP_MODE=required
+  // against a production build -- the bypass is never involved.
+  adminSession: [
+    async ({ browser, authRequest }, runWithSession) => {
+      const credentials = createAuthjsE2ECredentials('admin-shared');
+      await provisionAuthjsE2EUser(authRequest, credentials);
+      const session = await captureSteppedUpAdminSession(browser, credentials);
+      await runWithSession({ ...session, credentials });
     },
     { scope: 'worker' },
   ],
-  authedPage: async ({ browser, adminStorageState }, runWithPage) => {
+  // Same real step-up, for the platform admin. A fixed address (the server
+  // reads ADMIN_USER_EMAILS at startup), so a retry worker cannot re-enroll
+  // it -- acceptable: this serial, stateful file does not survive retries of
+  // its mutating tests anyway.
+  platformAdminSession: [
+    async ({ browser, authRequest }, runWithSession) => {
+      const credentials = {
+        email: AUDIT_PLATFORM_ADMIN_EMAIL,
+        password: 'E2E-Password-123!',
+      };
+      await provisionAuthjsE2EUser(authRequest, credentials);
+      await runWithSession(
+        await captureSteppedUpAdminSession(browser, credentials),
+      );
+    },
+    { scope: 'worker' },
+  ],
+  authedPage: async ({ browser, adminSession }, runWithPage) => {
+    await ensureFreshStepUp(browser, adminSession);
     const context = await browser.newContext({
-      storageState: adminStorageState,
+      storageState: adminSession.storageState,
+    });
+    const page = await context.newPage();
+    await runWithPage(page);
+    await context.close();
+  },
+  platformPage: async ({ browser, platformAdminSession }, runWithPage) => {
+    await ensureFreshStepUp(browser, platformAdminSession);
+    const context = await browser.newContext({
+      storageState: platformAdminSession.storageState,
     });
     const page = await context.newPage();
     await runWithPage(page);
     await context.close();
   },
 });
+// One fixture pool for the whole serial file. Mixing `base` and `authTest`
+// gives the group two worker digests, and Playwright then fails every retry
+// with "inconsistent test.use() options" -- one flaky test sank the CI job.
+// Fixtures are lazy: unauthenticated tests never sign anyone in.
+const test = authTest;
 
 test.describe.configure({ mode: 'serial' });
 
@@ -158,8 +232,14 @@ test.describe('Admin Hub (/admin)', () => {
       'admin hub breadcrumb shows Administration link',
       async ({ authedPage }) => {
         await authedPage.goto('/admin');
+        // `visible: true` skips React's streaming copy: a resolved Suspense
+        // boundary sits in a `hidden` container until it is swapped in, so
+        // for a moment the DOM holds two breadcrumbs and a strict locator
+        // flaked. Two *visible* breadcrumbs would still fail.
         await expect(
-          authedPage.locator('span').filter({ hasText: /^Administration$/ }),
+          authedPage
+            .locator('span')
+            .filter({ hasText: /^Administration$/, visible: true }),
         ).toBeVisible();
       },
     );
@@ -250,10 +330,13 @@ test.describe('Admin Invitations (/admin/invitations)', () => {
       'invitations page shows organization selection hub',
       async ({ authedPage }) => {
         await authedPage.goto('/admin/invitations');
+        // `visible: true`: see the breadcrumb test (streamed copy).
         await expect(
-          authedPage.getByText(
-            /choose an organization before sending direct invitations/i,
-          ),
+          authedPage
+            .getByText(
+              /choose an organization before sending direct invitations/i,
+            )
+            .filter({ visible: true }),
         ).toBeVisible();
         await expect(
           authedPage.getByRole('link', { name: /open invitations/i }).first(),
@@ -784,8 +867,97 @@ test.describe('Admin Audit Logs (/admin/security)', () => {
       );
 
       authTest(
+        'refuses an audit-settings PATCH without MFA, without a proof, after a wrong code and with a forged or borrowed proof, leaving the database untouched',
+        async ({ browser, authRequest, adminSession }) => {
+          const credentials = createAuthjsE2ECredentials('audit-step-up-deny');
+          await provisionAuthjsE2EUser(authRequest, credentials);
+          const context = await browser.newContext();
+          try {
+            const page = await context.newPage();
+            await signInAuthjsE2E(page, credentials);
+            const patch = () =>
+              page.request.fetch('/api/admin/audit-log-settings', {
+                method: 'PATCH',
+                data: {
+                  category: 'billing',
+                  enabled: true,
+                  retentionDays: 90,
+                  captureInputOnSuccess: false,
+                },
+              });
+
+            // No second factor yet: enrollment comes before any proof.
+            const unenrolled = await patch();
+            expect(unenrolled.status()).toBe(403);
+            expect(((await unenrolled.json()) as { code?: string }).code).toBe(
+              'MFA_ENROLLMENT_REQUIRED',
+            );
+
+            await enrollTotp(page.request);
+
+            // The running production build enforces step-up: no bypass.
+            const status = await page.request.get('/api/auth/step-up');
+            expect(status.status()).toBe(200);
+            expect(
+              ((await status.json()) as { data: { enforcement: string } }).data
+                .enforcement,
+            ).toBe('required');
+
+            const noProof = await patch();
+            expect(noProof.status()).toBe(403);
+            expect(((await noProof.json()) as { code?: string }).code).toBe(
+              'STEP_UP_REQUIRED',
+            );
+
+            const wrongCode = await page.request.fetch('/api/auth/step-up', {
+              method: 'POST',
+              data: { code: '000000' },
+            });
+            expect(wrongCode.status()).toBe(401);
+            expect(((await wrongCode.json()) as { code?: string }).code).toBe(
+              'MFA_CODE_INVALID',
+            );
+
+            const afterWrongCode = await patch();
+            expect(afterWrongCode.status()).toBe(403);
+            expect(
+              ((await afterWrongCode.json()) as { code?: string }).code,
+            ).toBe('STEP_UP_REQUIRED');
+
+            // No client-side bypass either: the proof is HMAC-bound to its
+            // holder, so neither a forged value nor another admin's genuine,
+            // live proof opens the gate.
+            const genuineProof = adminSession.storageState.cookies.find(
+              (cookie) => cookie.name === 'step_up_proof',
+            );
+            expect(genuineProof).toBeDefined();
+            for (const value of ['forged.step-up.proof', genuineProof!.value]) {
+              await context.addCookies([{ ...genuineProof!, value }]);
+              const borrowed = await patch();
+              expect(borrowed.status()).toBe(403);
+              expect(((await borrowed.json()) as { code?: string }).code).toBe(
+                'STEP_UP_REQUIRED',
+              );
+            }
+
+            const written = await withLocalE2EDatabase(
+              (sql) => sql`
+                select count(*)::int as n
+                from audit_log_settings s
+                join users u on u.id = s.updated_by_user_id
+                where u.email = ${credentials.email}
+              `,
+            );
+            expect(written[0]?.n).toBe(0);
+          } finally {
+            await context.close().catch(() => undefined);
+          }
+        },
+      );
+
+      authTest(
         'enables the waitlist audit category via the settings UI (feature_flag stays on by default)',
-        async ({ authedPage }) => {
+        async ({ authedPage, adminSession }) => {
           await authedPage.goto('/admin/security');
 
           const featureFlagRow = authedPage.locator('tr').filter({
@@ -810,9 +982,46 @@ test.describe('Admin Audit Logs (/admin/security)', () => {
           await waitlistRow.getByRole('button', { name: /^off$/i }).click();
           const enableWaitlistResponse = await enableWaitlistResponsePromise;
           expect(enableWaitlistResponse.status()).toBe(200);
+          const { setting } = (
+            (await enableWaitlistResponse.json()) as {
+              data: { setting: { id: string; category: string } };
+            }
+          ).data;
+          expect(setting.category).toBe('waitlist');
 
           await expect(
             waitlistRow.getByRole('button', { name: /^on$/i }),
+          ).toBeVisible();
+
+          // Persisted, not just acknowledged: the row the UI wrote, read back
+          // from the real database, attributed to the stepped-up admin.
+          const [row] = await withLocalE2EDatabase(
+            (sql) => sql`
+              select s.category, s.enabled, s.ownership_state,
+                     s.organization_id is not null as has_organization,
+                     u.email as updated_by_email
+              from audit_log_settings s
+              left join users u on u.id = s.updated_by_user_id
+              where s.id = ${setting.id}
+            `,
+          );
+          expect(row).toEqual({
+            category: 'waitlist',
+            enabled: true,
+            ownership_state: 'canonical_organization',
+            has_organization: true,
+            updated_by_email: adminSession.credentials.email,
+          });
+
+          // And the server renders that state on a fresh load.
+          await authedPage.reload();
+          await expect(
+            authedPage
+              .locator('tr')
+              .filter({
+                has: authedPage.getByText('waitlist', { exact: true }),
+              })
+              .getByRole('button', { name: /^on$/i }),
           ).toBeVisible();
         },
       );
@@ -882,11 +1091,54 @@ test.describe('Admin Audit Logs (/admin/security)', () => {
       );
 
       authTest(
-        'approving a newly created waitlist entry records a waitlist category audit event now that the category is enabled',
-        async ({ authedPage }) => {
-          const email = `e2e+audit-waitlist-${Date.now().toString()}@example.com`;
+        'a platform admin enables the global waitlist category via the settings UI, then approving an entry records a waitlist audit event',
+        async ({ platformPage }) => {
+          // SEC-41: the waitlist is platform-global. Only a platform admin may
+          // approve, and the approval is audited at platform-global scope, so
+          // the organization override above does not apply to it -- the
+          // global default has to be switched on, through the same UI.
+          await platformPage.goto('/admin/security');
+          await expect(platformPage.getByText('global defaults')).toBeVisible();
 
-          const joinResponse = await authedPage.request.post(
+          const globalWaitlistRow = platformPage.locator('tr').filter({
+            has: platformPage.getByText('waitlist', { exact: true }),
+          });
+          const enableResponsePromise = platformPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'PATCH' &&
+              response.url().endsWith('/api/admin/audit-log-settings'),
+          );
+          await globalWaitlistRow
+            .getByRole('button', { name: /^off$/i })
+            .click();
+          const enableResponse = await enableResponsePromise;
+          expect(enableResponse.status()).toBe(200);
+          const { setting } = (
+            (await enableResponse.json()) as {
+              data: { setting: { id: string; tenantId: string | null } };
+            }
+          ).data;
+          expect(setting.tenantId).toBeNull();
+
+          const [row] = await withLocalE2EDatabase(
+            (sql) => sql`
+              select s.category, s.enabled, s.ownership_state,
+                     s.organization_id, u.email as updated_by_email
+              from audit_log_settings s
+              left join users u on u.id = s.updated_by_user_id
+              where s.id = ${setting.id}
+            `,
+          );
+          expect(row).toEqual({
+            category: 'waitlist',
+            enabled: true,
+            ownership_state: 'intentional_global',
+            organization_id: null,
+            updated_by_email: AUDIT_PLATFORM_ADMIN_EMAIL,
+          });
+
+          const email = `e2e+audit-waitlist-${Date.now().toString()}@example.com`;
+          const joinResponse = await platformPage.request.post(
             '/api/auth/waitlist',
             { data: { email } },
           );
@@ -895,13 +1147,17 @@ test.describe('Admin Audit Logs (/admin/security)', () => {
             'Expected POST /api/auth/waitlist to succeed -- set REGISTRATION_MODE=invite-only for this scenario (see pnpm e2e:admin:audit-logs)',
           ).toBe(true);
 
-          await authedPage.goto('/admin/waitlist');
-          const entryRow = authedPage
+          await platformPage.goto('/admin/waitlist');
+          const entryRow = platformPage
             .locator('tr')
-            .filter({ has: authedPage.getByText(email, { exact: true }) });
+            // `visible: true`: see the breadcrumb test (streamed copy).
+            .filter({
+              has: platformPage.getByText(email, { exact: true }),
+              visible: true,
+            });
           await expect(entryRow).toBeVisible();
 
-          const approveResponsePromise = authedPage.waitForResponse(
+          const approveResponsePromise = platformPage.waitForResponse(
             (response) =>
               response.request().method() === 'POST' &&
               /\/api\/admin\/waitlist\/[^/]+\?action=approve$/.test(
@@ -914,7 +1170,7 @@ test.describe('Admin Audit Logs (/admin/security)', () => {
           const approveResponse = await approveResponsePromise;
           expect(approveResponse.status()).toBe(200);
 
-          const auditRes = await authedPage.request.get(
+          const auditRes = await platformPage.request.get(
             '/api/admin/audit-logs?category=waitlist&limit=50',
           );
           expect(auditRes.ok()).toBe(true);
@@ -1002,7 +1258,9 @@ test.describe('Admin Audit Logs (/admin/security)', () => {
 
       authTest(
         'category filters on GET /api/admin/audit-logs and the browse UI never mix categories',
-        async ({ authedPage }) => {
+        // The platform admin browses every scope: the waitlist event above is
+        // platform-global, invisible to an organization admin by design.
+        async ({ platformPage: authedPage }) => {
           for (const category of ['feature_flag', 'waitlist', 'admin_access']) {
             const res = await authedPage.request.get(
               `/api/admin/audit-logs?category=${category}&limit=50`,
@@ -1018,18 +1276,21 @@ test.describe('Admin Audit Logs (/admin/security)', () => {
           }
 
           await authedPage.goto('/admin/security/audit-logs');
-          await authedPage.getByLabel('Category').selectOption('feature_flag');
+          // The browser applies a filter on change; there is no submit button.
           const filterResponsePromise = authedPage.waitForResponse(
             (response) =>
               response.request().method() === 'GET' &&
               response.url().includes('/api/admin/audit-logs') &&
               response.url().includes('category=feature_flag'),
           );
-          await authedPage.getByRole('button', { name: 'Filter' }).click();
-          await filterResponsePromise;
+          await authedPage.getByLabel('Category').selectOption('feature_flag');
+          expect((await filterResponsePromise).status()).toBe(200);
 
+          // Two suites above each create a flag: at least one row, any count.
           await expect(
-            authedPage.getByText('feature_flag.create', { exact: true }),
+            authedPage
+              .getByText('feature_flag.create', { exact: true })
+              .first(),
           ).toBeVisible();
           await expect(
             authedPage.getByText('waitlist.approve', { exact: true }),

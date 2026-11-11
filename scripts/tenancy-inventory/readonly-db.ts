@@ -5,6 +5,7 @@ import postgres from 'postgres';
 import {
   DEV_DEFAULT_URL,
   TEST_DEFAULT_URL,
+  assertTestEndpointIdentity,
   parsePostgresUrl,
 } from '../lib/db-guard.mjs';
 
@@ -87,6 +88,9 @@ export async function withReadOnlyDb<T>(
   target: LocalTarget,
   fn: (tx: ReadOnlyDb) => Promise<T>,
 ): Promise<T> {
+  // OZI-221: no-op on the fixed 5433 target; under the isolated runner,
+  // refuses any server that cannot present this run's token.
+  if (target === 'test') await assertTestEndpointIdentity(TEST_DEFAULT_URL);
   const client = postgres(resolveLocalUrl(target), {
     connect_timeout: 10,
     connection: {

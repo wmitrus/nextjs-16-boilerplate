@@ -123,7 +123,10 @@ describe('withReadOnlyDb snapshot semantics (real DB)', () => {
 
 describe('describeLocalTarget', () => {
   it('never includes credentials, only host:port/database', () => {
-    expect(describeLocalTarget('test')).toBe('127.0.0.1:5433/app_test');
+    // OZI-221: 5433 unless `pnpm test:db:ci:isolated` set its own port
+    // (that mode is pinned in scripts/lib/db-guard.test.ts).
+    const testPort = process.env.DB_TEST_ISOLATED_PORT ?? '5433';
+    expect(describeLocalTarget('test')).toBe(`127.0.0.1:${testPort}/app_test`);
     expect(describeLocalTarget('dev')).toBe('127.0.0.1:5432/app_dev');
   });
 });

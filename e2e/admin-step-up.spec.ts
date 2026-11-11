@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { generate } from 'otplib';
 
 import {
   createAuthjsE2ECredentials,
@@ -7,6 +6,7 @@ import {
   provisionAuthjsE2EUser,
   signInAuthjsE2E,
 } from './authjs-auth';
+import { enrollTotp, nextStepCode } from './authjs-step-up';
 
 /**
  * Real step-up round trip (SEC-48).
@@ -41,60 +41,6 @@ if (
       `ADMIN_STEP_UP_MODE=required? ${String(stepUpRequired)}. ` +
       'Run it through `pnpm e2e:admin:step-up`.',
   );
-}
-
-/** RFC 6238 code for the enrolled seed, matching the app's pinned policy. */
-async function codeFor(secret: string, epochSeconds?: number): Promise<string> {
-  return generate({
-    strategy: 'totp',
-    secret,
-    algorithm: 'sha1',
-    digits: 6,
-    period: 30,
-    ...(epochSeconds === undefined ? {} : { epoch: epochSeconds }),
-  });
-}
-
-/**
- * A code from the *next* time step.
- *
- * Confirming an enrollment spends the current step (that is the replay guard
- * working as designed), so any later challenge in the same test must present
- * a different one. One step ahead is inside the app's ±1-step tolerance, so
- * the server accepts it without the test having to sleep for 30 seconds.
- */
-async function nextStepCode(secret: string): Promise<string> {
-  return codeFor(secret, Math.floor(Date.now() / 1000) + 30);
-}
-
-/** Enrolls a TOTP factor through the real endpoints and returns its secret. */
-async function enrollTotp(
-  page: Page,
-): Promise<{ secret: string; recoveryCodes: string[] }> {
-  const started = await page.request.post('/api/auth/mfa/totp');
-  expect(started.status()).toBe(200);
-  const startedBody = (await started.json()) as {
-    data: { secret: string; enrollmentUri: string; qrDataUri: string };
-  };
-  expect(startedBody.data.enrollmentUri).toContain('otpauth://totp/');
-  expect(startedBody.data.qrDataUri.startsWith('data:image/svg+xml')).toBe(
-    true,
-  );
-
-  const confirmed = await page.request.fetch('/api/auth/mfa/totp', {
-    method: 'PUT',
-    data: { code: await codeFor(startedBody.data.secret) },
-  });
-  expect(confirmed.status()).toBe(200);
-  const confirmedBody = (await confirmed.json()) as {
-    data: { recoveryCodes: string[] };
-  };
-  expect(confirmedBody.data.recoveryCodes).toHaveLength(10);
-
-  return {
-    secret: startedBody.data.secret,
-    recoveryCodes: confirmedBody.data.recoveryCodes,
-  };
 }
 
 /** A mutation that exists on every scenario: renaming the caller's own row. */
@@ -135,7 +81,7 @@ test.describe('Admin step-up (SEC-48)', () => {
     await provisionAuthjsE2EUser(request, credentials);
     await signInAuthjsE2E(page, credentials);
 
-    const { secret } = await enrollTotp(page);
+    const { secret } = await enrollTotp(page.request);
 
     // Enrolled: the admin panel is reachable again.
     await page.goto('/admin');
@@ -189,7 +135,7 @@ test.describe('Admin step-up (SEC-48)', () => {
     await provisionAuthjsE2EUser(request, credentials);
     await signInAuthjsE2E(page, credentials);
 
-    const { recoveryCodes } = await enrollTotp(page);
+    const { recoveryCodes } = await enrollTotp(page.request);
     const code = recoveryCodes[0]!;
 
     const first = await page.request.fetch('/api/auth/step-up', {
@@ -213,7 +159,7 @@ test.describe('Admin step-up (SEC-48)', () => {
     const credentials = createAuthjsE2ECredentials('step-up-signin');
     await provisionAuthjsE2EUser(request, credentials);
     await signInAuthjsE2E(page, credentials);
-    const { secret } = await enrollTotp(page);
+    const { secret } = await enrollTotp(page.request);
 
     // A fresh browser context: password alone must no longer be enough.
     const context = await browser.newContext();

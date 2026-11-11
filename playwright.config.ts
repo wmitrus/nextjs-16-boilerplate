@@ -6,6 +6,7 @@ import {
   e2eIsolatedEnv,
   resolveE2EBaseURL,
 } from './e2e/production-service-guard';
+import { assertStepUpModeAllowedForE2EServer } from './e2e/step-up-mode';
 
 function parseBoolean(value: string | undefined): boolean | undefined {
   if (value === 'true') {
@@ -63,6 +64,10 @@ assertE2EServerIsolatedFromProductionServices(webServerEnv, {
   dir: process.cwd(),
   serveBuild,
 });
+
+// OZI-220 / SEC-48: a production build refuses the step-up bypass, so the
+// server env it actually receives must not request it.
+assertStepUpModeAllowedForE2EServer(webServerEnv, { serveBuild });
 
 /**
  * See https://playwright.dev/docs/test-configuration.

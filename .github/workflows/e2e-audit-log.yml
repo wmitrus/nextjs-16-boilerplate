@@ -9,7 +9,9 @@ jobs:
   e2e-tests:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-audit-log'
     name: Playwright Admin Audit Log E2E
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.58 refuses
+    # to install Chromium ("does not support chromium on ubuntu26.04-x64").
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
@@ -47,28 +49,44 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps
 
+      # Same reason as e2e-admin-step-up.yml: `db:test:up` returns once the
+      # container is created, and the reset that follows would race a
+      # Postgres still starting. `--wait` blocks on the compose healthcheck;
+      # the runner's own `up` call is then a no-op.
+      - name: Start the test database
+        run: docker compose -f podman-compose.yml up -d --wait test-db
+
       - name: Build and run Admin Audit Log E2E Tests
         # Build and test share one step (not split, as they were before)
         # because the Next.js production build itself prerenders pages that
         # need NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY at build time -- a separate
         # "Build" step without this env block fails prerendering
-        # /_not-found with "Missing publishableKey". Matches the exact
-        # `pnpm build && ...` shape already proven in e2e-label.yml /
-        # e2e-matrix.yml's `e2e:*:ci` scripts.
+        # /_not-found with "Missing publishableKey".
+        #
+        # `pnpm e2e:build` (OZI-219) builds with the production-service
+        # guard: outbound-service keys pinned empty and no production target
+        # inlined in the bundle.
+        #
+        # `pnpm e2e:admin:audit-logs` pins AUTH_PROVIDER=authjs and
+        # ADMIN_STEP_UP_MODE=required: `next start` serves a production build,
+        # which refuses the step-up bypass (SEC-48), so the admin fixture
+        # passes the real TOTP challenge (OZI-220).
         run: pnpm e2e:build && pnpm e2e:admin:audit-logs
         env:
+          # Tripwire: the audit-trail block self-skips without AuthJS / the db
+          # flag provider; in this job that would be a green check proving
+          # nothing. With this set, admin.spec.ts throws instead.
+          E2E_REQUIRE_AUDIT_SETTINGS_SUITE: 'true'
+          # `scripts/compose-db-local.mjs` defaults to Podman; GitHub runners
+          # ship Docker with no Podman socket, so the default fails with
+          # "Cannot connect to the Docker daemon at .../podman.sock".
+          DB_COMPOSE_ENGINE: docker
+          # Only the build needs these (prerendered pages read the
+          # publishable key). The run is AUTH_PROVIDER=authjs, so neither
+          # check-e2e-auth-env.mjs nor the global setup needs Clerk fixture
+          # identities.
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          # The 'single' scenario's global setup provisions/validates these
-          # Clerk test identities unconditionally, regardless of the app's
-          # own active AUTH_PROVIDER -- see scripts/e2e-clerk-fixtures.md.
-          # Neither e2e-label.yml nor e2e-matrix.yml sets these either
-          # (pre-existing gap in both, not specific to this workflow).
-          E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME }}
-          E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD }}
-          E2E_CLERK_SINGLE_NEW_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_USERNAME }}
-          E2E_CLERK_SINGLE_NEW_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_PASSWORD }}
-          # Add other mandatory E2E env vars here
 
       - name: Upload Admin Audit Log Playwright Artifacts
         if: always()

@@ -5,6 +5,7 @@ import {
   DEV_DEFAULT_URL,
   TEST_DEFAULT_URL,
   guardDevOperation,
+  assertTestEndpointIdentity,
   guardTestOperation,
   parsePostgresUrl,
 } from './lib/db-guard.mjs';
@@ -169,6 +170,7 @@ async function main() {
       guardDevOperation(url);
     } else {
       guardTestOperation(url);
+      await assertTestEndpointIdentity(url);
     }
   }
 

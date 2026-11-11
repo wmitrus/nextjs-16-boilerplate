@@ -435,6 +435,18 @@ async function main() {
     ...process.env,
   };
 
+  // OZI-220: honoured only when the caller sets them explicitly. From
+  // `.env.local` they are a developer's settings, not the run's: NODE_ENV is
+  // Next.js's own business (`next start` is production whatever the file
+  // says), and the developer's INTERNAL_API_KEY is neither test-only nor long
+  // enough for a production-mode build (e2e/internal-api-key.ts).
+  if (process.env.NODE_ENV === undefined) {
+    delete env.NODE_ENV;
+  }
+  if (process.env.INTERNAL_API_KEY === undefined) {
+    delete env.INTERNAL_API_KEY;
+  }
+
   const backendMode = applySharedRuntimeEnv(env, scenario, variant);
 
   applyEnv(env);

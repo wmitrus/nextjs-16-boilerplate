@@ -7,34 +7,85 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
+# No default write access. The release job writes only through the
+# GitHub App token, which is minted after validation and installation.
+permissions: {}
 
 jobs:
-  release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  preflight:
+    # Unprivileged gate: no secrets, no checkout, read-only token.
+    # Only a successful push to main of this repository, run by the real
+    # Production Deployment workflow file, may reach the release job.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.id == 1139249731 &&
+      github.event.repository.id == 1139249731 &&
+      github.event.workflow_run.path == '.github/workflows/prod-deploy.yml'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - name: Verify triggering commit is in main history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Triggering head_sha is not a full commit SHA."
+            exit 1
+          fi
+          # Resolve the branch head explicitly; a bare "main" could match a tag.
+          main_ref="$(gh api "repos/${REPO}/git/ref/heads/main" --jq '"\(.ref) \(.object.type) \(.object.sha)"')"
+          read -r ref_name ref_type MAIN_SHA <<<"$main_ref"
+          if [[ "$ref_name" != 'refs/heads/main' || "$ref_type" != 'commit' || ! "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not resolve refs/heads/main ($main_ref)."
+            exit 1
+          fi
+          # BASE...HEAD = triggering commit...main head. BASE is an ancestor of
+          # HEAD exactly when HEAD is not behind it: status identical or ahead,
+          # behind_by 0.
+          result="$(gh api "repos/${REPO}/compare/${HEAD_SHA}...${MAIN_SHA}" --jq '"\(.status) \(.behind_by)"')"
+          case "$result" in
+            'identical 0' | 'ahead 0') echo "Commit ${HEAD_SHA} is in main history at ${MAIN_SHA} ($result)." ;;
+            *)
+              echo "::error::Commit ${HEAD_SHA} is not an ancestor of main ($result); refusing to release."
+              exit 1
+              ;;
+          esac
+
+  release:
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
+      # No dependency cache: this job holds the App token, so it must not
+      # restore state written by other workflow runs.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Minted only after install, so lifecycle scripts never see it.
       - name: 'Generate token'
         id: generate_token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.SEMANTIC_RELEASE_GITHUB_APP_ID }}
           private-key: ${{ secrets.SEMANTIC_RELEASE_GITHUB_APP_PRIVATE_KEY }}
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-          token: ${{ steps.generate_token.outputs.token }}
-      - name: Install pnpm
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
-        with:
-          node-version: 24
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Run semantic release
         run: |

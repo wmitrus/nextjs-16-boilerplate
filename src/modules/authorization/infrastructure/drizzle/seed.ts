@@ -72,7 +72,7 @@ const ORGS = {
   },
 };
 
-const ROLES = {
+export const ROLES = {
   acmeOwner: {
     id: '20000000-0000-4000-8000-000000000001',
     organizationId: ORGS.acmeHq.id,
@@ -93,7 +93,7 @@ const ROLES = {
   },
 };
 
-const POLICIES = [
+export const POLICIES = [
   {
     id: '30000000-0000-4000-8000-000000000001',
     organizationId: ORGS.acmeHq.id,
@@ -145,7 +145,11 @@ const POLICIES = [
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.SECURITY,
-    actions: [ACTIONS.SECURITY_READ_AUDIT, ACTIONS.SECURITY_MANAGE_POLICIES],
+    actions: [
+      ACTIONS.SECURITY_READ_AUDIT,
+      ACTIONS.SECURITY_MANAGE_POLICIES,
+      ACTIONS.SECURITY_MANAGE_AUDIT_SETTINGS,
+    ],
     conditions: {},
   },
   {
@@ -253,7 +257,11 @@ const POLICIES = [
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.SECURITY,
-    actions: [ACTIONS.SECURITY_READ_AUDIT, ACTIONS.SECURITY_MANAGE_POLICIES],
+    actions: [
+      ACTIONS.SECURITY_READ_AUDIT,
+      ACTIONS.SECURITY_MANAGE_POLICIES,
+      ACTIONS.SECURITY_MANAGE_AUDIT_SETTINGS,
+    ],
     conditions: {},
   },
   {

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 import { resolveInternalApiKey } from './e2e/internal-api-key';
+import { assertStepUpModeAllowedForE2EServer } from './e2e/step-up-mode';
 
 function parseBoolean(value: string | undefined): boolean | undefined {
   if (value === 'true') {
@@ -30,6 +31,10 @@ const hasExplicitServerLogDir =
 const reuseExistingServer =
   parseBoolean(process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER) ??
   (!process.env.CI && !hasExplicitServerLogDir);
+
+assertStepUpModeAllowedForE2EServer(process.env, {
+  serveBuild: Boolean(process.env.CI),
+});
 
 /**
  * See https://playwright.dev/docs/test-configuration.

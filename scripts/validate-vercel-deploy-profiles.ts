@@ -9,11 +9,12 @@ import {
 import { parseVercelDeployDryRunOutput } from './validate-vercel-prebuilt-artifact';
 import { PUBLIC_PREBUILT_ENV_TEMPLATE_IGNORE_RULES } from './vercel/prebuilt-env-template-policy';
 
-const PREVIEW_REQUIRED_SOURCE_PATHS = [
+export const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'next.config.ts',
   'package.json',
   'e2e/env-files.ts',
   'e2e/internal-api-key.ts',
+  'e2e/step-up-mode.ts',
   'src/core/db/migrations/generated/meta/_journal.json',
 ];
 const PREBUILT_RUNTIME_PATHS = ['/.next', '/node_modules', '/src'];

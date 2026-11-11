@@ -1,5 +1,3 @@
-import { readEnvFileMap, resolveProjectPath } from './env-files';
-
 /**
  * Fallback key for E2E runs that do not supply one.
  *
@@ -15,33 +13,32 @@ import { readEnvFileMap, resolveProjectPath } from './env-files';
 export const DEFAULT_INTERNAL_API_KEY =
   'e2e-fixture-internal-api-key-not-a-secret';
 
-function resolveInternalApiKeyFromFiles(): string | undefined {
-  const envFiles = [
-    resolveProjectPath('.env.local'),
-    resolveProjectPath('.env'),
-  ];
+/**
+ * Mirrors `MIN_INTERNAL_API_KEY_LENGTH` in `src/core/env.ts` (asserted equal
+ * by `internal-api-key.test.ts`). Not imported: this module is loaded by
+ * `playwright.config.ts`, and importing `@/core/env` there would run the app's
+ * env validation against the test runner's own environment.
+ */
+export const E2E_MIN_INTERNAL_API_KEY_LENGTH = 32;
 
-  for (const envFile of envFiles) {
-    const value = readEnvFileMap(
-      envFile,
-      `internal API key env file: ${envFile}`,
-    ).get('INTERNAL_API_KEY');
-
-    if (value && value.trim().length > 0) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
+/**
+ * The internal API key every E2E web server is started with (OZI-220).
+ *
+ * Test-only by construction: an explicit `INTERNAL_API_KEY` in the runner's
+ * environment, or the committed fixture. It is deliberately never read from
+ * `.env.local` / `.env` -- those hold a developer's own key, which is not a
+ * test fixture and (at 17 characters locally) made a production-mode build
+ * reject every internal request with a 500. A key below the production floor
+ * fails here, before the server starts, instead.
+ */
 export function resolveInternalApiKey(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  const value = env.INTERNAL_API_KEY?.trim();
-  if (value && value.length > 0) {
-    return value;
+  const value = env.INTERNAL_API_KEY?.trim() || DEFAULT_INTERNAL_API_KEY;
+  if (value.length < E2E_MIN_INTERNAL_API_KEY_LENGTH) {
+    throw new Error(
+      `[e2e] INTERNAL_API_KEY must be at least ${E2E_MIN_INTERNAL_API_KEY_LENGTH} characters: the E2E server may be a production build (\`pnpm start\`), which refuses a shorter key. Unset it to use the committed test fixture.`,
+    );
   }
-
-  return resolveInternalApiKeyFromFiles() ?? DEFAULT_INTERNAL_API_KEY;
+  return value;
 }

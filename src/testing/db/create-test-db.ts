@@ -39,7 +39,10 @@ export interface TestDb {
 export async function createTestDb(
   driver: DbDriver = 'pglite',
   url?: string,
+  options: { readonly systemIdentifier?: string } = {},
 ): Promise<TestDb> {
+  if (driver === 'postgres' && url)
+    return createPostgresTestDb(url, { ...options, r4aSchemaA: 'bootstrap' });
   return resolveTestDb(driver, url);
 }
 
@@ -99,6 +102,7 @@ export async function resolveMigrationOnlyTestDb(): Promise<TestDb> {
   try {
     const testDb = await createPostgresTestDb(isolated.url, {
       r4aSchemaA: 'absent',
+      systemIdentifier: isolated.systemIdentifier,
     });
     return {
       db: testDb.db,
@@ -137,6 +141,11 @@ interface SchemaAOption {
   readonly r4aSchemaA: 'bootstrap' | 'absent';
 }
 
+interface PostgresTestDbOptions extends SchemaAOption {
+  /** Trusted cluster identity; defaults to the one globalSetup read in-container. */
+  readonly systemIdentifier?: string;
+}
+
 async function createPgliteTestDb(
   { r4aSchemaA }: SchemaAOption = { r4aSchemaA: 'bootstrap' },
 ): Promise<TestDb> {
@@ -156,10 +165,29 @@ async function createPgliteTestDb(
   };
 }
 
+/**
+ * OZI-219 P1 — every destructive statement on a real-Postgres test database is
+ * preceded by the target proof: a loopback URL AND the cluster
+ * `system_identifier` read through a trusted channel (inside the container,
+ * by globalSetup). Missing or malformed identity refuses before connecting;
+ * a mismatch refuses inside the TRUNCATE statement itself, so no row is lost.
+ */
 async function createPostgresTestDb(
   url: string,
-  { r4aSchemaA }: SchemaAOption = { r4aSchemaA: 'bootstrap' },
+  {
+    r4aSchemaA,
+    systemIdentifier = trustedTestSystemIdentifier(),
+  }: PostgresTestDbOptions = { r4aSchemaA: 'bootstrap' },
 ): Promise<TestDb> {
+  if (!isLocalR4aBootstrapTarget(url))
+    throw new Error(
+      '[createTestDb] non-loopback test database refused; nothing truncated',
+    );
+  if (!SYSTEM_IDENTIFIER_PATTERN.test(systemIdentifier))
+    throw new Error(
+      '[createTestDb] a trusted target identity (system_identifier) is required; refused, nothing truncated',
+    );
+
   const client = postgres(url, {
     max: 1,
     // Test isolation uses TRUNCATE ... CASCADE on the disposable test DB.
@@ -169,16 +197,35 @@ async function createPostgresTestDb(
   });
   const db = drizzlePostgres(client) as unknown as DrizzleDb;
 
-  await truncateAll(db);
-  if (r4aSchemaA === 'bootstrap') await ensureR4aSchemaA(client, url);
+  try {
+    await truncateAll(db, systemIdentifier);
+    if (r4aSchemaA === 'bootstrap')
+      await ensureR4aSchemaA(client, systemIdentifier);
+  } catch (error) {
+    await client.end({ timeout: 5 });
+    throw error;
+  }
 
   return {
     db,
     cleanup: async () => {
-      await truncateAll(db);
-      await client.end({ timeout: 5 });
+      try {
+        await truncateAll(db, systemIdentifier);
+      } finally {
+        await client.end({ timeout: 5 });
+      }
     },
   };
+}
+
+const SYSTEM_IDENTIFIER_PATTERN = /^\d{1,20}$/;
+
+function trustedTestSystemIdentifier(): string {
+  return (
+    (inject('TEST_DATABASE_SYSTEM_IDENTIFIER') as string | undefined) ??
+    process.env.TEST_DATABASE_SYSTEM_IDENTIFIER?.trim() ??
+    ''
+  );
 }
 
 /**
@@ -192,16 +239,8 @@ async function createPostgresTestDb(
  */
 async function ensureR4aSchemaA(
   client: postgres.Sql,
-  url: string,
+  expectedSystemIdentifier: string,
 ): Promise<void> {
-  if (!isLocalR4aBootstrapTarget(url))
-    throw new Error(
-      '[createTestDb] the R4a schema A bootstrap refuses a non-loopback test database',
-    );
-  const expectedSystemIdentifier =
-    (inject('TEST_DATABASE_SYSTEM_IDENTIFIER') as string | undefined) ??
-    process.env.TEST_DATABASE_SYSTEM_IDENTIFIER?.trim() ??
-    '';
   const session = await client.reserve();
   try {
     await bootstrapR4aSchemaAConcurrent(
@@ -213,11 +252,25 @@ async function ensureR4aSchemaA(
   }
 }
 
-async function truncateAll(db: DrizzleDb): Promise<void> {
+/**
+ * The identity check runs in the same statement, on the same session, as the
+ * TRUNCATEs. `expectedSystemIdentifier` is digits-only (validated by the
+ * caller), so inlining it as a literal is safe -- a DO block takes no params.
+ */
+async function truncateAll(
+  db: DrizzleDb,
+  expectedSystemIdentifier: string,
+): Promise<void> {
+  if (!SYSTEM_IDENTIFIER_PATTERN.test(expectedSystemIdentifier))
+    throw new Error('[createTestDb] invalid system_identifier; refused');
   await db.execute(sql`
     DO $$ DECLARE
       r RECORD;
     BEGIN
+      IF (SELECT system_identifier::text FROM pg_control_system())
+           IS DISTINCT FROM ${sql.raw(`'${expectedSystemIdentifier}'`)} THEN
+        RAISE EXCEPTION '[createTestDb] target is not the trusted test cluster (system_identifier mismatch); refused, nothing truncated';
+      END IF;
       FOR r IN (
         SELECT tablename
         FROM pg_tables

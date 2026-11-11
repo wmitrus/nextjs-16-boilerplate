@@ -118,10 +118,17 @@ function runStudio(url, target) {
   });
 }
 
-function runSchemaReset(url) {
+/**
+ * OZI-219 P1: the reset verifies `systemIdentifier` (read inside the local
+ * container) on its own connection before the first DROP. Always pinned
+ * (empty when absent, which the reset refuses) so an inherited value never
+ * leaks in.
+ */
+export function runSchemaReset(url, systemIdentifier) {
   run('pnpm', ['exec', 'tsx', 'scripts/lib/postgres-schema-reset.ts'], {
     ...process.env,
     DATABASE_URL: url,
+    DB_RESET_EXPECTED_SYSTEM_IDENTIFIER: systemIdentifier ?? '',
   });
 }
 
@@ -213,7 +220,7 @@ async function main() {
     }
 
     process.stdout.write('[db-ops] Resetting schema...\n');
-    runSchemaReset(url);
+    runSchemaReset(url, systemIdentifier);
 
     process.stdout.write('[db-ops] Running migrations...\n');
     runMigrate(url, systemIdentifier);

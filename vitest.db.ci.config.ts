@@ -21,6 +21,8 @@ export default defineConfig({
       'src/**/*.db.test.ts',
       'scripts/audit-log/**/*.db.test.ts',
       'scripts/tenancy-inventory/**/*.db.test.ts',
+      // OZI-219 P1: identity-before-DROP proof on a disposable cluster.
+      'scripts/lib/postgres-schema-reset.db.test.ts',
     ],
     globalSetup: [
       'tests/db/setup.test-endpoint.ts',

@@ -1,3 +1,11 @@
+## [2.26.2](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.26.1...v2.26.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* **ci:** include AuthJS step-up helper in Vercel preview (OZI-220) ([e3bff34](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e3bff346b9e66d010cfab5b5d4a0f233aa29e119))
+* **e2e:** restore AuthJS audit-settings E2E with real SEC-48 MFA (OZI-220) ([545e761](https://github.com/wmitrus/nextjs-16-boilerplate/commit/545e7619689a5be3cc2387b2e8036d70ad8ffc25))
+
 ## [2.26.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.26.0...v2.26.1) (2026-11-11)
 
 

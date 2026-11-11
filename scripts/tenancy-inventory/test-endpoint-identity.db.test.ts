@@ -21,9 +21,14 @@ let url: string;
 let admin: postgres.Sql;
 let database: string;
 
-async function loadGuardFor(port: string) {
+// Only switches the guard into isolated mode; the identity check probes the
+// `url` it is given, so this need not (and on test:db:local's fixed 5433
+// profile cannot) match the server's port.
+const ISOLATED_PORT = '55433';
+
+async function loadIsolatedGuard() {
   vi.resetModules();
-  vi.stubEnv('DB_TEST_ISOLATED_PORT', port);
+  vi.stubEnv('DB_TEST_ISOLATED_PORT', ISOLATED_PORT);
   vi.stubEnv('DB_TEST_ISOLATED_TOKEN', TOKEN);
   return import('../lib/db-guard.mjs');
 }
@@ -53,7 +58,7 @@ afterAll(async () => {
 
 describe('assertTestEndpointIdentity against a real Postgres (OZI-221)', () => {
   it('refuses a foreign Postgres on the port', async () => {
-    const guard = await loadGuardFor(new URL(url).port);
+    const guard = await loadIsolatedGuard();
     await expect(guard.assertTestEndpointIdentity(url)).rejects.toThrow(
       /not the isolated test endpoint/,
     );
@@ -63,7 +68,7 @@ describe('assertTestEndpointIdentity against a real Postgres (OZI-221)', () => {
     await admin.unsafe(
       `ALTER DATABASE "${database}" SET nextjs16.test_endpoint_token = '${'c'.repeat(32)}'`,
     );
-    const guard = await loadGuardFor(new URL(url).port);
+    const guard = await loadIsolatedGuard();
     await expect(guard.assertTestEndpointIdentity(url)).rejects.toThrow(
       /not the isolated test endpoint/,
     );
@@ -73,7 +78,7 @@ describe('assertTestEndpointIdentity against a real Postgres (OZI-221)', () => {
     await admin.unsafe(
       `ALTER DATABASE "${database}" SET nextjs16.test_endpoint_token = '${TOKEN}'`,
     );
-    const guard = await loadGuardFor(new URL(url).port);
+    const guard = await loadIsolatedGuard();
     await expect(
       guard.assertTestEndpointIdentity(url),
     ).resolves.toBeUndefined();

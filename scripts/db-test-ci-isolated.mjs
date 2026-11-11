@@ -60,8 +60,15 @@ if (created.status !== 0 || !/^[0-9a-f]{64}$/.test(id)) {
 
 // spawnSync children receive Ctrl+C themselves; keep this process alive so
 // the finally block below still removes the container.
-process.on('SIGINT', () => {});
-process.on('SIGTERM', () => {});
+let interrupted = false;
+const onSignal = (signal) => {
+  interrupted = true;
+  process.stderr.write(
+    `[db-isolated] ${signal} interrupted the run; exiting non-zero\n`,
+  );
+};
+process.on('SIGINT', onSignal);
+process.on('SIGTERM', onSignal);
 
 let status = 1;
 try {
@@ -125,4 +132,5 @@ try {
     );
   }
 }
-process.exit(status);
+// Yield once so a signal queued while spawnSync blocked reaches onSignal.
+setImmediate(() => process.exit(interrupted && status === 0 ? 1 : status));

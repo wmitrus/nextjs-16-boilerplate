@@ -1,3 +1,17 @@
+# [2.27.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.26.2...v2.27.0) (2026-11-11)
+
+
+### Bug Fixes
+
+* **db:** address PR [#156](https://github.com/wmitrus/nextjs-16-boilerplate/issues/156) review findings for R4a-B and E2E isolation ([2c1ac99](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2c1ac99e3de6917a94a622fae6f37ca0d5099484))
+* **db:** prove CI service DB identity and ship E2E guard to Vercel ([73b17b7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/73b17b70951861e9b1374e41ec591616850c249a))
+* **db:** prove target identity before destructive test-DB operations (OZI-219) ([513f263](https://github.com/wmitrus/nextjs-16-boilerplate/commit/513f263bd29dc174a3d5ebaf9d7efd5df7ee82eb))
+
+
+### Features
+
+* **db:** cut over audit settings runtime to R4a schema A ([7164760](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7164760f0a3dc6802ede5c2c69e53bfc19b698dc))
+
 ## [2.26.2](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.26.1...v2.26.2) (2026-11-11)
 
 

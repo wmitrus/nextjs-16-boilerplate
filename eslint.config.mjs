@@ -323,6 +323,9 @@ const eslintConfig = defineConfig([
     'debug-storybook.log',
     'next-env.d.ts',
     'node_modules/**',
+    // Git-ignored scratch space (evidence, nested git worktrees with their
+    // own node_modules) -- flat config does not read .gitignore (OZI-221).
+    'temp/**',
     'docs/**/*.js',
     // Markdown is formatted by Prettier directly (pnpm lint's own script,
     // lint-staged, editor on-save) -- never by ESLint. ESLint's default

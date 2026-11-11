@@ -22,7 +22,10 @@ export default defineConfig({
       'scripts/audit-log/**/*.db.test.ts',
       'scripts/tenancy-inventory/**/*.db.test.ts',
     ],
-    globalSetup: ['tests/db/setup.postgres.ts'],
+    globalSetup: [
+      'tests/db/setup.test-endpoint.ts',
+      'tests/db/setup.postgres.ts',
+    ],
     pool: 'forks',
     fileParallelism: false,
     maxWorkers: 16,

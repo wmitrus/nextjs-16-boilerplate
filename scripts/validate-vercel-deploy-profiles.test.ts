@@ -15,6 +15,7 @@ import {
   assertVercelProductionMigrationOwnershipValid,
   assertVercelProductionReadinessVerificationValid,
   assertVercelToolingAndProvenanceValid,
+  PREVIEW_REQUIRED_SOURCE_PATHS,
 } from './validate-vercel-deploy-profiles';
 
 describe('assertVercelDeployProfilesValid', () => {
@@ -73,6 +74,7 @@ describe('assertVercelPreviewSourceUploadValid', () => {
         'package.json',
         'e2e/env-files.ts',
         'e2e/internal-api-key.ts',
+        'e2e/step-up-mode.ts',
         'src/core/db/migrations/generated/meta/_journal.json',
       ],
       ignored: [],
@@ -108,6 +110,30 @@ describe('assertVercelPreviewSourceUploadValid', () => {
     expect(() => assertVercelPreviewSourceUploadValid(dryRunOutput)).toThrow(
       'e2e/internal-api-key.ts',
     );
+  });
+
+  // `next build` typechecks playwright.config.ts, so every ./e2e/* module it
+  // imports must survive .vercelignore's `/e2e/*` exclusion and be required
+  // by the dry-run check. OZI-220: e2e/step-up-mode.ts was missed (preview
+  // build failed with TS2307) -- this pins the list to the real imports.
+  it('requires and uploads every e2e module imported by playwright.config.ts', () => {
+    const root = path.resolve(__dirname, '..');
+    const config = readFileSync(
+      path.join(root, 'playwright.config.ts'),
+      'utf8',
+    );
+    const ignoreRules = readFileSync(path.join(root, '.vercelignore'), 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim());
+    const imported = [...config.matchAll(/from '\.\/(e2e\/[^']+)'/g)].map(
+      ([, modulePath]) => `${modulePath}.ts`,
+    );
+
+    expect(imported.length).toBeGreaterThan(0);
+    for (const modulePath of imported) {
+      expect(PREVIEW_REQUIRED_SOURCE_PATHS).toContain(modulePath);
+      expect(ignoreRules).toContain(`!/${modulePath}`);
+    }
   });
 });
 

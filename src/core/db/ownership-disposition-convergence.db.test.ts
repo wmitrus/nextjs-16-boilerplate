@@ -11,7 +11,10 @@ import {
 import { gatherOwnershipDispositionEvidence } from './ownership-disposition-gate';
 import { sqlRunnerFromPostgres, type SqlRunner } from './post-migrate-steps';
 
-import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
+import {
+  resolveMigrationOnlyTestDb,
+  type TestDb,
+} from '@/testing/db/create-test-db';
 
 /**
  * OZI-213 — real-PostgreSQL proof for the mutating convergence executor.
@@ -34,7 +37,10 @@ const isRealPg = driver === 'postgres';
 let testDb: TestDb;
 
 beforeAll(async () => {
-  testDb = await resolveTestDb();
+  // OZI-219: this suite asserts pre-R4a-A states (NOT VALID ownership CHECKs,
+  // unsettled NULL-organization rows), which schema A forbids -- it runs on a
+  // migration-only database, never the shared schema-A fixture.
+  testDb = await resolveMigrationOnlyTestDb();
 });
 
 afterAll(async () => {
@@ -48,7 +54,8 @@ async function withRollback<T>(
     throw new Error('Real PostgreSQL TEST_DATABASE_URL is required');
   }
 
-  const client = postgres(testUrl, {
+  // The suite's own migration-only database, never the shared fixture.
+  const client = postgres(testDb.url ?? testUrl, {
     prepare: false,
     max: 1,
     idle_timeout: 5,

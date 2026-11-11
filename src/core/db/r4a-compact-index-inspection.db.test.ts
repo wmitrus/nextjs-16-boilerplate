@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import type { R4aCompactIndexSqlRunner } from './r4a-compact-index-inspection';
 import { inspectR4aCompactIndex } from './r4a-compact-index-inspection';
 
+import { startIsolatedPostgres } from '@/testing/db/isolated-postgres';
+
 /**
  * PostgreSQL catalog proof. Test-only DDL is contained in a rolled-back
  * transaction; production-facing inspector code remains SELECT-only.
@@ -18,9 +20,15 @@ let client: Sql | undefined;
 
 beforeAll(async () => {
   if (!testUrl) return;
+  // OZI-219: the inspector's pre-A decisions (eligible-to-create, NOT VALID
+  // CHECKs) need a migration-only database; the shared fixture is schema A.
+  const isolated = await startIsolatedPostgres({ r4aSchemaA: 'absent' });
   const { default: postgres } = await import('postgres');
-  client = postgres(testUrl, { max: 1 });
-  closeClient = () => client!.end();
+  client = postgres(isolated.url, { max: 1 });
+  closeClient = async () => {
+    await client!.end();
+    await isolated.stop();
+  };
 });
 
 afterAll(async () => {

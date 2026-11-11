@@ -8,6 +8,7 @@
 /e2e/*
 !/e2e/env-files.ts
 !/e2e/internal-api-key.ts
+!/e2e/production-service-guard.ts
 !/e2e/step-up-mode.ts
 /playwright-report
 /test-results

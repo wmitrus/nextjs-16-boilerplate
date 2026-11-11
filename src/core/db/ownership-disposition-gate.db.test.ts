@@ -15,7 +15,10 @@ import type { DbDriver } from '@/core/db/types';
 import { gatherOwnershipDispositionEvidence } from './ownership-disposition-gate';
 import { sqlRunnerFromDrizzle, type SqlRunner } from './post-migrate-steps';
 
-import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
+import {
+  resolveMigrationOnlyTestDb,
+  type TestDb,
+} from '@/testing/db/create-test-db';
 
 /**
  * OZI-213 — real-PostgreSQL proof for the Quarantine Disposition Gate.
@@ -53,7 +56,10 @@ async function cleanupFixture(): Promise<void> {
 }
 
 beforeAll(async () => {
-  testDb = await resolveTestDb();
+  // OZI-219: this suite asserts pre-R4a-A states (NOT VALID ownership CHECKs,
+  // unsettled NULL-organization rows), which schema A forbids -- it runs on a
+  // migration-only database, never the shared schema-A fixture.
+  testDb = await resolveMigrationOnlyTestDb();
   runner = sqlRunnerFromDrizzle(testDb.db, (text) => sql.raw(text));
   await cleanupFixture();
 });

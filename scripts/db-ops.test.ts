@@ -38,7 +38,7 @@ vi.mock('node:child_process', async (importOriginal) => {
   };
 });
 
-import { runMigrate } from './db-ops.mjs';
+import { runMigrate, runSchemaReset } from './db-ops.mjs';
 
 const DEV_URL = 'postgres://postgres:postgres@127.0.0.1:5432/app_dev';
 const TEST_URL = 'postgres://postgres:postgres@127.0.0.1:5433/app_test';
@@ -85,5 +85,59 @@ describe('db-ops runMigrate', () => {
     const [, , opts] = mockSpawnSync.mock.calls[0]!;
     expect(opts.env.DB_DRIVER).toBe('postgres');
     expect(opts.env.DB_PROVIDER).toBe('drizzle');
+  });
+});
+
+describe('db-ops runMigrate — R4a target identity (OZI-219)', () => {
+  afterEach(() => {
+    mockSpawnSync.mockClear();
+    vi.unstubAllEnvs();
+  });
+
+  it('passes the identity read inside the local container to migrate-cli', () => {
+    runMigrate(DEV_URL, '7619451615054913566');
+
+    const [, , opts] = mockSpawnSync.mock.calls[0]!;
+    expect(opts.env.R4A_LOCAL_SYSTEM_IDENTIFIER).toBe('7619451615054913566');
+  });
+
+  it('pins the identity empty when absent: an inherited shell value never leaks in', () => {
+    vi.stubEnv('R4A_LOCAL_SYSTEM_IDENTIFIER', '7400000000000000001');
+
+    runMigrate(DEV_URL);
+
+    const [, , opts] = mockSpawnSync.mock.calls[0]!;
+    expect(opts.env.R4A_LOCAL_SYSTEM_IDENTIFIER).toBe('');
+  });
+});
+
+describe('db-ops runSchemaReset — target identity (OZI-219 P1)', () => {
+  afterEach(() => {
+    mockSpawnSync.mockClear();
+    vi.unstubAllEnvs();
+  });
+
+  it('passes the identity read inside the local container to the reset', () => {
+    runSchemaReset(TEST_URL, '7619451615054913566');
+
+    const [, args, opts] = mockSpawnSync.mock.calls[0]!;
+    expect(args).toEqual([
+      'exec',
+      'tsx',
+      'scripts/lib/postgres-schema-reset.ts',
+    ]);
+    expect(opts.env.DATABASE_URL).toBe(TEST_URL);
+    expect(opts.env.DB_RESET_EXPECTED_SYSTEM_IDENTIFIER).toBe(
+      '7619451615054913566',
+    );
+  });
+
+  it('pins the identity empty when absent: an inherited shell value never leaks in', () => {
+    vi.stubEnv('DB_RESET_EXPECTED_SYSTEM_IDENTIFIER', '7400000000000000001');
+
+    runSchemaReset(TEST_URL);
+
+    const [, , opts] = mockSpawnSync.mock.calls[0]!;
+    expect(opts.env.DB_RESET_EXPECTED_SYSTEM_IDENTIFIER).toBe('');
   });
 });

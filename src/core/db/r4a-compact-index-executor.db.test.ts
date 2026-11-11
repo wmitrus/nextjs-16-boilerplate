@@ -180,7 +180,7 @@ async function retainedSnapshot(connection: Sql) {
 }
 
 beforeAll(async () => {
-  database = await startIsolatedPostgres();
+  database = await startIsolatedPostgres({ r4aSchemaA: 'absent' });
   testUrl = database.url;
   const parsed = new URL(testUrl);
   if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost')

@@ -190,15 +190,21 @@ function makeConvergeDeps() {
     policiesHelperCheckExists: false,
   }));
 
+  const inspectR4aCompactIndex = vi.fn(async () => ({
+    decision: 'already-converged',
+  })) as unknown as Mock & MigrateProdDeps['inspectR4aCompactIndex'];
+
   const deps: MigrateProdDeps = {
     runConvergence,
     runS7Convergence,
     gatherS7Evidence,
+    inspectR4aCompactIndex,
     openConvergenceRunner,
   };
 
   return {
     deps,
+    inspectR4aCompactIndex,
     runner,
     close,
     runConvergence,
@@ -431,5 +437,69 @@ describe('db-migrate-prod: AUD·A convergence is conditional (Preview only), nev
     expect(dryRunBlock).not.toMatch(/runDrizzleMigrate/);
     expect(dryRunBlock).not.toMatch(/CREATE INDEX|VALIDATE CONSTRAINT/i);
     expect(dryRunBlock).not.toMatch(/runPreviewConvergence/);
+  });
+});
+
+describe('db-migrate-prod R4a schema-A Preview gate (OZI-219)', () => {
+  const savedUnpooled = process.env.DATABASE_URL_UNPOOLED;
+  const savedVercelEnv = process.env.VERCEL_ENV;
+  const DIRECT = 'postgresql://u:p@ep-preview.us-east-1.aws.neon.tech/app';
+
+  afterEach(() => {
+    if (savedUnpooled === undefined) delete process.env.DATABASE_URL_UNPOOLED;
+    else process.env.DATABASE_URL_UNPOOLED = savedUnpooled;
+    if (savedVercelEnv === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = savedVercelEnv;
+    vi.clearAllMocks();
+    mockSpawnSync.mockReturnValue({ status: 0, error: null });
+  });
+
+  it('passes a Preview whose two compact uniques are already converged, read-only', async () => {
+    process.env.DATABASE_URL_UNPOOLED = DIRECT;
+    process.env.VERCEL_ENV = 'preview';
+    const h = makeConvergeDeps();
+
+    await run([], h.deps);
+
+    expect(h.inspectR4aCompactIndex.mock.calls.map((call) => call[1])).toEqual([
+      'feature_flags',
+      'audit_log_settings',
+    ]);
+    expect(
+      h.runner.query.mock.calls.some((call: unknown[]) =>
+        /\b(CREATE|DROP|ALTER)\b/i.test(String(call[0])),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    'eligible-to-create',
+    'invalid-index-recovery-required',
+    'blocked-by-schema-drift',
+  ])(
+    'fails the Preview build closed when a table is %s, naming the operator apply command',
+    async (decision) => {
+      process.env.DATABASE_URL_UNPOOLED = DIRECT;
+      process.env.VERCEL_ENV = 'preview';
+      const h = makeConvergeDeps();
+      h.inspectR4aCompactIndex
+        .mockResolvedValueOnce({ decision: 'already-converged' })
+        .mockResolvedValueOnce({ decision });
+
+      await expect(run([], h.deps)).rejects.toThrow(
+        `audit_log_settings: ${decision}`,
+      );
+      expect(h.close).toHaveBeenCalled();
+    },
+  );
+
+  it('never inspects or gates a Production build', async () => {
+    process.env.DATABASE_URL_UNPOOLED = DIRECT;
+    process.env.VERCEL_ENV = 'production';
+    const h = makeConvergeDeps();
+
+    await run([], h.deps);
+
+    expect(h.inspectR4aCompactIndex).not.toHaveBeenCalled();
   });
 });

@@ -39,6 +39,7 @@ It also explains which local database profile each command family targets.
 | `pnpm db:r4a:compact-indexes` | Production-style Postgres     | Operator-gated R4a compact-index inspection/execution; never automatic                |
 | `pnpm db:r4a:check:prod`      | Neon Production               | Identity-verified, read-only R4a `--check` (see R4a section)                          |
 | `pnpm db:r4a:check:preview`   | Neon Preview branch           | Identity-verified, read-only R4a `--check` for an explicit Preview branch             |
+| `pnpm db:r4a:apply:preview`   | Neon Preview branch           | Identity-verified, operator-approved Preview schema A apply (create-only)             |
 
 All removed shorthand aliases stay removed. Use the explicit target-specific families above.
 
@@ -160,7 +161,59 @@ The R4a compact indexes are intentionally managed outside Drizzle migrations:
 
 They are absent from the Drizzle schema and snapshots on purpose. Therefore,
 `pnpm db:generate` must not generate or be used to create either index. The
-standard migration/deployment paths never import or invoke this executor.
+Production/Preview migration path (`pnpm db:migrate:prod`) never creates them.
+
+### Schema A and the R4a-B runtime (OZI-219)
+
+The Audit Settings UPSERTs target the compact unique
+(`ON CONFLICT (category, organization_id)`). A database without it rejects
+them with SQLSTATE `42P10` — a visible blocker, never retried with the old SQL.
+"Schema A" is the Production state after OZI-213 + OZI-216: both R4a ownership
+CHECKs validated and both compact uniques valid, ready and live, with all six
+legacy/semantic uniques retained.
+
+| Environment                                               | How it reaches schema A                                                                                                                                                                            |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PGlite, `test:db`, `test:db:ci`, dev/test containers, E2E | Automatically after migrations (`runMigrations` R4a-A bootstrap via `db:pglite:migrate` / `db:dev:migrate` / `db:test:migrate` / reset). PGlite, or a PostgreSQL whose identity is proven (below). |
+| Preview                                                   | Operator: `pnpm db:r4a:apply:preview --git-branch=<branch> --preview-approved`. The Preview build only **checks** and fails closed.                                                                |
+| Production                                                | Operator only (OZI-216, already applied): `pnpm db:r4a:compact-indexes --apply --production-approved`.                                                                                             |
+
+The non-Production bootstrap reuses the R4a specification, inspector and
+executor (`CONCURRENTLY` on real PostgreSQL, a plain build on PGlite). It
+first repeats the OZI-213 step for `feature_flags` and `audit_log_settings`
+only (validate the ownership CHECK when the gate plans it; never
+`audit_events`). It is idempotent and fails closed on any other decision
+(`blocked-by-disposition`, `blocked-by-schema-drift`, INVALID index). Both
+tables are checked read-only before the first VALIDATE or CREATE, so a
+blocked second table leaves the first untouched. That is not atomicity:
+`CREATE INDEX CONCURRENTLY` cannot run in a transaction, so a failure between
+tables can still leave one done, and a re-run converges. It never drops
+anything, and `runMigrations` refuses it under `NODE_ENV=production`. An
+existing migration-only local database upgrades on its next `db:*:migrate`.
+
+**Target identity.** A loopback hostname is not proof that a database is
+local: a tunnel or port-forward can put a remote cluster behind `127.0.0.1`.
+Every real-PostgreSQL bootstrap needs the cluster's `system_identifier`
+(random per `initdb`), read through a trusted channel and never through the
+URL being verified:
+
+- Testcontainers fixtures read it inside the container they started.
+- `db:dev:migrate` / `db:test:migrate` / reset (and E2E container mode) read
+  it with `podman|docker exec` inside `nextjs16_dev_db` / `nextjs16_test_db`;
+  `test:db:local` does the same in its `globalSetup`.
+
+`runMigrations` compares it with the server behind the URL before the
+migrator runs, and again on the bootstrap session before any R4a DDL. A
+mismatch, an unreadable identity, or a missing proof refuses with no DDL. A
+non-loopback URL is refused outright. A bare `db:pglite:migrate` with
+`DB_DRIVER=postgres` has no proof: it migrates but does not provision schema
+A, and says so.
+
+**Release order:** schema A on the target first, then the R4a-B runtime. A
+Preview build (`pnpm db:migrate:prod` with `VERCEL_ENV=preview`) reads the
+catalog after migrating. It stops before `pnpm build` unless both tables are
+`already-converged`, and it performs no R4a DDL itself. **Rollback of B** is a
+plain code revert while the six retained uniques exist (schema A keeps them).
 
 ### Decisions reported by `--check`
 
@@ -204,6 +257,32 @@ log. All `.env*` files are git-ignored.
 On success the launcher prints the verified project, branch and database. It
 then prints the `--check` JSON. Read `evidence[].decision` for **both**
 `feature_flags` and `audit_log_settings` against the table above.
+
+### Preview schema A apply (operator-gated)
+
+`pnpm db:r4a:apply:preview --git-branch=<git-branch> --preview-approved` is the
+only way to create the compact uniques on a Preview branch. It is a separate
+command from `--check`, and `--check` never creates anything. It requires its
+own trailing `--preview-approved`, and it runs every identity check above:
+exactly one `preview/<git-branch>` branch that is not the Production, default
+or protected branch. It then runs the executor's **standard** convergence:
+CREATE a missing index, no-op a converged one, refuse anything else. It never
+drops or recovers. There is no Production apply in this launcher; Production
+keeps its own separately authorized command. The launcher calls the executor
+with a typed `apply` command; it never passes the Production
+`--production-approved` token.
+
+The apply needs the R4a ownership CHECKs already validated (OZI-213). A
+Preview branch forked from Production after OZI-216 inherits schema A and is
+already converged. An older branch whose CHECKs are still NOT VALID reports
+`blocked-by-disposition`, and this command refuses it; recreate that Preview
+branch from Production instead.
+
+1. `pnpm db:r4a:check:preview --git-branch=<branch>`: both tables must report
+   `eligible-to-create` or `already-converged`.
+2. `pnpm db:r4a:apply:preview --git-branch=<branch> --preview-approved`.
+3. Re-run step 1: both must report `already-converged`. Then redeploy the
+   Preview.
 
 ### Standard apply
 

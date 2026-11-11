@@ -66,6 +66,11 @@ jobs:
 
       - name: Migrate fixed-port test-db (scripts/tenancy-inventory)
         run: pnpm db:test:migrate
+        env:
+          # OZI-219: the R4a schema A bootstrap proves the target by reading
+          # its cluster identity inside this service container.
+          DB_COMPOSE_ENGINE: docker
+          R4A_LOCAL_DB_CONTAINER: ${{ job.services.tenancy-inventory-test-db.id }}
 
       - name: Run DB tests (Testcontainers)
         run: pnpm test:db:ci

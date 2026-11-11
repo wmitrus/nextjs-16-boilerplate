@@ -40,6 +40,7 @@ beforeEach(() => {
   delete process.env.DATABASE_URL_UNPOOLED;
   delete process.env.DB_DRIVER;
   delete process.env.DB_PROVIDER;
+  vi.stubEnv('R4A_LOCAL_SYSTEM_IDENTIFIER', '');
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
@@ -264,6 +265,7 @@ describe('runMigrateCli orchestration (same URL for migration + convergence)', (
     });
     expect(h.runMigrations.mock.calls[0]![2]).toEqual({
       postgresUrl: undefined,
+      r4aSchemaA: 'bootstrap',
     });
     expect(h.close).toHaveBeenCalledTimes(1);
   });
@@ -278,7 +280,64 @@ describe('runMigrateCli orchestration (same URL for migration + convergence)', (
     expect(h.createDb.mock.calls[0]![0].url).toBe('file:./pglite-data');
     expect(h.runMigrations.mock.calls[0]![2]).toEqual({
       postgresUrl: undefined,
+      r4aSchemaA: 'bootstrap',
     });
+  });
+
+  it('postgres: a loopback target WITH the local container identity requests the R4a schema A bootstrap (OZI-219)', async () => {
+    process.env.DB_DRIVER = 'postgres';
+    process.env.DATABASE_URL = 'postgres://u:p@127.0.0.1:5433/app_test';
+    vi.stubEnv('R4A_LOCAL_SYSTEM_IDENTIFIER', '7619451615054913566');
+    const h = makeDeps();
+
+    await runMigrateCli(h.deps);
+
+    expect(h.runMigrations.mock.calls[0]![2]).toEqual({
+      postgresUrl: 'postgres://u:p@127.0.0.1:5433/app_test',
+      r4aSchemaA: 'bootstrap',
+      r4aTargetSystemIdentifier: '7619451615054913566',
+    });
+  });
+
+  it('postgres: a loopback hostname alone is not proof -- no identity, no bootstrap (OZI-219)', async () => {
+    process.env.DB_DRIVER = 'postgres';
+    process.env.DATABASE_URL = 'postgres://u:p@127.0.0.1:5433/app_test';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const h = makeDeps();
+
+    await runMigrateCli(h.deps);
+
+    expect(h.runMigrations.mock.calls[0]![2]).toEqual({
+      postgresUrl: 'postgres://u:p@127.0.0.1:5433/app_test',
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/R4a schema A NOT provisioned/),
+    );
+  });
+
+  it('postgres: an identity never unlocks a non-loopback target (OZI-219)', async () => {
+    process.env.DB_DRIVER = 'postgres';
+    process.env.DATABASE_URL = 'postgres://u:p@db.example.com:5432/app';
+    vi.stubEnv('R4A_LOCAL_SYSTEM_IDENTIFIER', '7619451615054913566');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const h = makeDeps();
+
+    await runMigrateCli(h.deps);
+
+    expect(h.runMigrations.mock.calls[0]![2]).not.toHaveProperty('r4aSchemaA');
+  });
+
+  it('postgres + NODE_ENV=production: a remote target never requests the R4a bootstrap (OZI-219)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.DB_DRIVER = 'postgres';
+    process.env.DATABASE_URL_UNPOOLED =
+      'postgresql://u:p@ep-x.eu-central-1.aws.neon.tech/neondb?sslmode=require';
+    vi.stubEnv('R4A_LOCAL_SYSTEM_IDENTIFIER', '7619451615054913566');
+    const h = makeDeps();
+
+    await runMigrateCli(h.deps);
+
+    expect(h.runMigrations.mock.calls[0]![2]).not.toHaveProperty('r4aSchemaA');
   });
 
   it('DB_PROVIDER=prisma throws before createDb', async () => {

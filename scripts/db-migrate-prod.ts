@@ -12,6 +12,10 @@ import {
   type AudAPostMigrateResult,
   type SqlRunner,
 } from '@/core/db/post-migrate-steps';
+import {
+  inspectR4aCompactIndex,
+  R4A_COMPACT_INDEX_SPECS,
+} from '@/core/db/r4a-compact-index-inspection';
 import { runS7PostMigrateSteps } from '@/core/db/s7-post-migrate-steps';
 import {
   assertS7ProductionPreconditions,
@@ -132,6 +136,7 @@ export interface MigrateProdDeps {
   runConvergence: typeof runAudAPostMigrateSteps;
   runS7Convergence: typeof runS7PostMigrateSteps;
   gatherS7Evidence: typeof gatherS7ProductionEvidence;
+  inspectR4aCompactIndex: typeof inspectR4aCompactIndex;
   openConvergenceRunner: (url: string) => {
     runner: SqlRunner;
     close: () => Promise<unknown>;
@@ -143,6 +148,7 @@ function defaultMigrateProdDeps(): MigrateProdDeps {
     runConvergence: runAudAPostMigrateSteps,
     runS7Convergence: runS7PostMigrateSteps,
     gatherS7Evidence: gatherS7ProductionEvidence,
+    inspectR4aCompactIndex,
     openConvergenceRunner: (url) => {
       const sql = postgres(url, {
         prepare: false,
@@ -263,10 +269,43 @@ async function runPreviewConvergence(
       JSON.stringify({ s7Converge: { applied: true, ...s7Result } }, null, 2),
     );
 
+    await assertPreviewR4aSchemaA(runner, deps);
+
     return result;
   } finally {
     await close();
   }
+}
+
+/**
+ * OZI-219 — fail-closed Preview deployment order. The R4a-B runtime needs the
+ * R4a-A compact uniques; this build only READS the catalog (no R4a DDL) and
+ * refuses to continue to `pnpm build` until an operator has provisioned
+ * schema A on this Preview branch through the identity-verified
+ * `pnpm db:r4a:apply:preview`. Never retried, never worked around.
+ */
+async function assertPreviewR4aSchemaA(
+  runner: SqlRunner,
+  deps: MigrateProdDeps,
+): Promise<void> {
+  const decisions = [];
+  for (const { table } of R4A_COMPACT_INDEX_SPECS)
+    decisions.push({
+      table,
+      decision: (await deps.inspectR4aCompactIndex(runner, table)).decision,
+    });
+  console.log(JSON.stringify({ r4aSchemaA: decisions }, null, 2));
+  const notReady = decisions.filter(
+    ({ decision }) => decision !== 'already-converged',
+  );
+  if (notReady.length > 0)
+    throw new Error(
+      `[db-migrate-prod] Preview R4a schema A is not ready (${notReady
+        .map(({ table, decision }) => `${table}: ${decision}`)
+        .join(
+          ', ',
+        )}). An operator must run \`pnpm db:r4a:apply:preview --git-branch=<branch> --preview-approved\` first; this build performs no R4a DDL.`,
+    );
 }
 
 export async function run(

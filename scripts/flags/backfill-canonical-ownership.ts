@@ -424,14 +424,21 @@ interface CandidateRow {
 }
 
 /**
- * A `23505` from the canonical UPDATE in this code path can only be the
- * canonical partial unique: that UPDATE leaves `id`, `key` and `tenant_id`
- * untouched, so no other unique constraint on `feature_flags` can newly fire.
- * Still prefer an explicit constraint/index-name match, and never treat a
- * `23505` that names a DIFFERENT constraint as a canonical collision.
+ * A `23505` from the canonical UPDATE in this code path can only be a
+ * canonical `(key, organization_id)` collision: that UPDATE leaves `id`, `key`
+ * and `tenant_id` untouched, so no other unique constraint on `feature_flags`
+ * can newly fire. Two indexes enforce that collision: the semantic partial
+ * unique and, from R4a-A (OZI-219), the compact `NULLS NOT DISTINCT` unique --
+ * the only one left after R4a-C. Still prefer an explicit constraint/index-name
+ * match, and never treat a `23505` that names a DIFFERENT constraint as a
+ * canonical collision.
  */
-function isCanonicalPartialUniqueViolation(error: unknown): boolean {
-  const CANONICAL = 'uq_feature_flags_key_organization_canonical';
+const CANONICAL_UNIQUES: ReadonlySet<string> = new Set([
+  'uq_feature_flags_key_organization_canonical',
+  'uq_feature_flags_key_organization_compact',
+]);
+
+export function isCanonicalPartialUniqueViolation(error: unknown): boolean {
   const layers: unknown[] = [
     error,
     error && typeof error === 'object'
@@ -455,8 +462,12 @@ function isCanonicalPartialUniqueViolation(error: unknown): boolean {
           ? o.constraint_name
           : undefined;
     const message = typeof o.message === 'string' ? o.message : '';
-    if (constraint === CANONICAL || message.includes(CANONICAL)) return true;
-    if (constraint && constraint !== CANONICAL) return false;
+    if (
+      (constraint !== undefined && CANONICAL_UNIQUES.has(constraint)) ||
+      [...CANONICAL_UNIQUES].some((name) => message.includes(name))
+    )
+      return true;
+    if (constraint) return false;
     if (
       o.code === '23505' &&
       !constraint &&

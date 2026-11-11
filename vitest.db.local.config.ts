@@ -12,6 +12,7 @@ export default defineConfig({
     fileParallelism: false,
     maxWorkers: 16,
     testTimeout: 60_000,
+    globalSetup: ['tests/db/setup.local.ts'],
     coverage: {
       enabled: false,
       provider: 'v8',

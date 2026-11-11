@@ -1,6 +1,7 @@
 import { createDb } from '@/core/db/create-db';
 import { runMigrations } from '@/core/db/migrations/run-migrations';
 import { assertNoKnownPoolerMarker } from '@/core/db/post-migrate-steps';
+import { isLocalR4aBootstrapTarget } from '@/core/db/r4a-compact-index-bootstrap';
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
 /**
@@ -85,6 +86,33 @@ export function resolveMigrationTarget(driver: DbDriver): string | undefined {
   return url;
 }
 
+/**
+ * OZI-219 — the non-Production R4a-A bootstrap. PGlite is in-process and
+ * always converges. A PostgreSQL target converges only outside
+ * NODE_ENV=production, on a loopback URL, AND with the cluster identity
+ * `db-ops.mjs` read inside the local compose container
+ * (`R4A_LOCAL_SYSTEM_IDENTIFIER`), which `runMigrations` verifies on the
+ * bootstrap session before any DDL. A loopback hostname alone is never
+ * proof: without the identity, migrations run but schema A is not
+ * provisioned, and that is reported.
+ */
+export function resolveR4aSchemaABootstrap(
+  driver: DbDriver,
+  url: string | undefined,
+): { r4aSchemaA?: 'bootstrap'; r4aTargetSystemIdentifier?: string } {
+  if (driver === 'pglite') return { r4aSchemaA: 'bootstrap' };
+  if (process.env.NODE_ENV === 'production') return {};
+  const identity = process.env.R4A_LOCAL_SYSTEM_IDENTIFIER?.trim();
+  if (identity && url && isLocalR4aBootstrapTarget(url))
+    return { r4aSchemaA: 'bootstrap', r4aTargetSystemIdentifier: identity };
+  console.warn(
+    '[migrate-cli] R4a schema A NOT provisioned: no trusted local target ' +
+      'identity. Use `pnpm db:dev:migrate` / `pnpm db:test:migrate` for the ' +
+      'local compose databases.',
+  );
+  return {};
+}
+
 export interface MigrateCliDeps {
   createDb: typeof createDb;
   runMigrations: typeof runMigrations;
@@ -115,6 +143,7 @@ export async function runMigrateCli(
     // convergence cannot target different databases.
     await deps.runMigrations(dbRuntime.db, driver, {
       postgresUrl: driver === 'postgres' ? url : undefined,
+      ...resolveR4aSchemaABootstrap(driver, url),
     });
   } finally {
     await dbRuntime.close?.();

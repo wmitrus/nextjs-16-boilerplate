@@ -23,7 +23,11 @@ import {
   type AuditLogSettingsOwnershipState,
 } from './schema';
 
-import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
+import {
+  resolveMigrationOnlyTestDb,
+  resolveTestDb,
+  type TestDb,
+} from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
 let settingsSvc: DrizzleAuditLogSettingsAdminService;
@@ -486,89 +490,106 @@ describe('purgeExpiredAuditEvents', () => {
     expect(remaining[0]?.ownershipState).toBe('canonical_organization');
   });
 
-  it('keeps legacy tenant keys and ownership states isolated', async () => {
-    await insertLegacySetting({
-      category: 'security_event',
-      tenantId: 'legacy-a',
-      ownershipState: 'quarantined',
-      retentionDays: 7,
+  // OZI-219: two NULL-organization settings rows for one category are a
+  // pre-R4a-A state -- the compact unique forbids it on schema A (Production
+  // since OZI-216) -- so this case runs on a migration-only database.
+  describe('on a migration-only (pre-R4a-A) database', () => {
+    let schemaA: TestDb;
+
+    beforeAll(async () => {
+      schemaA = testDb;
+      testDb = await resolveMigrationOnlyTestDb();
     });
 
-    await insertLegacySetting({
-      category: 'security_event',
-      tenantId: 'legacy-b',
-      ownershipState: 'unresolved_legacy',
-      retentionDays: 30,
+    afterAll(async () => {
+      await testDb.cleanup();
+      testDb = schemaA;
     });
 
-    const now = new Date('2026-06-01T00:00:00Z');
+    it('keeps legacy tenant keys and ownership states isolated', async () => {
+      await insertLegacySetting({
+        category: 'security_event',
+        tenantId: 'legacy-a',
+        ownershipState: 'quarantined',
+        retentionDays: 7,
+      });
 
-    await insertEvent({
-      category: 'security_event',
-      tenantId: 'legacy-a',
-      ownershipState: 'unresolved_legacy',
-      occurredAt: new Date(now.getTime() - 8 * DAY_MS),
-    });
+      await insertLegacySetting({
+        category: 'security_event',
+        tenantId: 'legacy-b',
+        ownershipState: 'unresolved_legacy',
+        retentionDays: 30,
+      });
 
-    await insertEvent({
-      category: 'security_event',
-      tenantId: 'legacy-b',
-      ownershipState: 'unresolved_legacy',
-      occurredAt: new Date(now.getTime() - 8 * DAY_MS),
-    });
+      const now = new Date('2026-06-01T00:00:00Z');
 
-    await insertEvent({
-      category: 'security_event',
-      tenantId: 'legacy-a',
-      ownershipState: 'quarantined',
-      occurredAt: new Date(now.getTime() - 8 * DAY_MS),
-    });
+      await insertEvent({
+        category: 'security_event',
+        tenantId: 'legacy-a',
+        ownershipState: 'unresolved_legacy',
+        occurredAt: new Date(now.getTime() - 8 * DAY_MS),
+      });
 
-    const results = await purgeExpiredAuditEvents(testDb.db, {
-      dryRun: false,
-      now,
-    });
+      await insertEvent({
+        category: 'security_event',
+        tenantId: 'legacy-b',
+        ownershipState: 'unresolved_legacy',
+        occurredAt: new Date(now.getTime() - 8 * DAY_MS),
+      });
 
-    expect(results).toEqual(
-      expect.arrayContaining([
-        {
-          key: {
-            kind: 'legacy',
-            category: 'security_event',
-            legacyTenantId: 'legacy-a',
-            ownershipState: 'unresolved_legacy',
+      await insertEvent({
+        category: 'security_event',
+        tenantId: 'legacy-a',
+        ownershipState: 'quarantined',
+        occurredAt: new Date(now.getTime() - 8 * DAY_MS),
+      });
+
+      const results = await purgeExpiredAuditEvents(testDb.db, {
+        dryRun: false,
+        now,
+      });
+
+      expect(results).toEqual(
+        expect.arrayContaining([
+          {
+            key: {
+              kind: 'legacy',
+              category: 'security_event',
+              legacyTenantId: 'legacy-a',
+              ownershipState: 'unresolved_legacy',
+            },
+            retentionDays: 7,
+            deleted: 1,
           },
-          retentionDays: 7,
-          deleted: 1,
-        },
-        {
-          key: {
-            kind: 'legacy',
-            category: 'security_event',
-            legacyTenantId: 'legacy-b',
-            ownershipState: 'unresolved_legacy',
+          {
+            key: {
+              kind: 'legacy',
+              category: 'security_event',
+              legacyTenantId: 'legacy-b',
+              ownershipState: 'unresolved_legacy',
+            },
+            retentionDays: 30,
+            deleted: 0,
           },
-          retentionDays: 30,
-          deleted: 0,
-        },
-        {
-          key: {
-            kind: 'legacy',
-            category: 'security_event',
-            legacyTenantId: 'legacy-a',
-            ownershipState: 'quarantined',
+          {
+            key: {
+              kind: 'legacy',
+              category: 'security_event',
+              legacyTenantId: 'legacy-a',
+              ownershipState: 'quarantined',
+            },
+            retentionDays: 7,
+            deleted: 1,
           },
-          retentionDays: 7,
-          deleted: 1,
-        },
-      ]),
-    );
+        ]),
+      );
 
-    const remaining = await testDb.db.select().from(auditEventsTable);
+      const remaining = await testDb.db.select().from(auditEventsTable);
 
-    expect(remaining).toHaveLength(1);
-    expect(remaining[0]?.tenantId).toBe('legacy-b');
-    expect(remaining[0]?.ownershipState).toBe('unresolved_legacy');
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]?.tenantId).toBe('legacy-b');
+      expect(remaining[0]?.ownershipState).toBe('unresolved_legacy');
+    });
   });
 
   it('handles NULL legacy tenant keys with IS NOT DISTINCT FROM semantics', async () => {

@@ -86,7 +86,9 @@ function toStoredDto(
   return {
     id: row.id,
     category: row.category,
-    tenantId: row.tenantId,
+    // OZI-219: a global row's tenant_id is only a frozen retention-compat
+    // shadow (R4a-B never rewrites it), never part of the global DTO.
+    tenantId: source === 'global' ? null : row.tenantId,
     source,
     enabled: row.enabled,
     retentionDays: row.retentionDays,
@@ -333,12 +335,19 @@ export class DrizzleAuditLogSettingsAdminService {
    * OZI-71 AUD·D canonical settings UPSERT.
    *
    * The scope is the sole ownership authority. `tenant_id` remains a
-   * rollback-compatible shadow write:
+   * non-authoritative rollback/retention-compat shadow, written only on
+   * INSERT:
    * - organization -> stable internal organization id
    * - platform-global -> NULL
+   * DO UPDATE never rewrites it (OZI-219 / R4a-B freeze), so a historical
+   * key keeps resolving `resolveLegacyAuditRetentionCompat` until R4b-1.
    *
-   * Conflict inference deliberately targets the applicable semantic partial
-   * unique, never the retained legacy UNIQUE(category, tenant_id).
+   * OZI-219 (R4a-B): both branches infer the compact R4a-A unique
+   * `(category, organization_id) NULLS NOT DISTINCT`, never a semantic partial
+   * unique or the retained legacy UNIQUE(category, tenant_id). The compact
+   * index must exist first (R4a-A); without it PostgreSQL raises 42P10. The
+   * DO UPDATE ... WHERE re-asserts the conflicting row's ownership state, so a
+   * NULL-organization unresolved/quarantined row is never reclassified.
    */
   async upsertCanonical(
     input: CanonicalUpsertAuditSettingInput,
@@ -354,9 +363,9 @@ export class DrizzleAuditLogSettingsAdminService {
 
       return await this.upsertOrganizationCanonical(input, scope);
     } catch (error) {
-      // The two semantic partial uniques are handled by ON CONFLICT.
-      // A remaining 23505 is therefore typically the retained legacy
-      // UNIQUE(category, tenant_id) shadow collision. Preserve that row and
+      // The compact unique is handled by ON CONFLICT (and implies both
+      // semantic partial uniques). A remaining 23505 is therefore the
+      // retained legacy UNIQUE(category, tenant_id) shadow collision. Preserve that row and
       // fail closed until its compatibility disposition is explicit.
       if (isUniqueViolation(error)) {
         throw new AuditSettingAliasConflictError();
@@ -396,18 +405,15 @@ export class DrizzleAuditLogSettingsAdminService {
           ${input.captureInputOnSuccess},
           ${input.updatedByUserId}
         )
-      ON CONFLICT (category)
-        WHERE ownership_state = 'intentional_global'
+      ON CONFLICT (category, organization_id)
       DO UPDATE SET
-        tenant_id = NULL,
-        organization_id = NULL,
-        ownership_state = 'intentional_global',
         enabled = EXCLUDED.enabled,
         retention_days = EXCLUDED.retention_days,
         sample_rate = EXCLUDED.sample_rate,
         capture_input_on_success = EXCLUDED.capture_input_on_success,
         updated_by_user_id = EXCLUDED.updated_by_user_id,
         updated_at = now()
+      WHERE ${auditLogSettingsTable}.ownership_state = 'intentional_global'
       RETURNING
         id,
         category,
@@ -423,7 +429,10 @@ export class DrizzleAuditLogSettingsAdminService {
     const row = normalizeRawRows<RawSettingRow>(raw)[0];
 
     if (!row) {
-      throw new AuditCanonicalWriteInvariantError();
+      // The INSERT always yields a candidate, so no row means DO UPDATE's
+      // WHERE refused: the (category, NULL) key belongs to an unresolved or
+      // quarantined row. Preserve it and fail closed, as the legacy unique did.
+      throw new AuditSettingAliasConflictError();
     }
 
     return toRawStoredDto(row, 'global');
@@ -462,16 +471,14 @@ export class DrizzleAuditLogSettingsAdminService {
       WHERE o.id = ${scope.organizationId}
         AND o.tenant_id = ${scope.tenantId}
       ON CONFLICT (category, organization_id)
-        WHERE organization_id IS NOT NULL
-          AND ownership_state = 'canonical_organization'
       DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
         enabled = EXCLUDED.enabled,
         retention_days = EXCLUDED.retention_days,
         sample_rate = EXCLUDED.sample_rate,
         capture_input_on_success = EXCLUDED.capture_input_on_success,
         updated_by_user_id = EXCLUDED.updated_by_user_id,
         updated_at = now()
+      WHERE ${auditLogSettingsTable}.ownership_state = 'canonical_organization'
       RETURNING
         id,
         category,

@@ -60,7 +60,27 @@ Reason: raw Playwright bypasses scenario DB setup and can run against the curren
 
 Each scenario-runner invocation starts from scenario-specific process env. The Next.js server must not be reused across different scenario families by default because auth provider, tenancy mode, tenant-context source, DB URL/driver, and public app URL are read at server startup.
 
-`scripts/e2e/run-scenario.mjs` therefore defaults `PLAYWRIGHT_REUSE_EXISTING_SERVER=false`. Only override it for narrow local debugging when you have proved the already-running server was started with the same scenario env.
+`scripts/e2e/run-scenario.mjs` defaults `PLAYWRIGHT_REUSE_EXISTING_SERVER=false`, and both Playwright configs now never reuse a server (OZI-219). A server this config did not start cannot be checked, so a busy port fails the run.
+
+### Production-service isolation (OZI-219)
+
+Local env files hold real outbound-service credentials. `next dev` loads `.env.local`; `next build` and `next start` load `.env.production*`. On 2026-10-28 a local `next start` E2E run sent errors to Sentry, and its build forwarded edge logs to Production `/api/logs`, which hit Production Upstash and Logflare.
+
+Every E2E web server (`playwright.config.ts`, `playwright.vscode.config.ts`) and every E2E build gets its env from `e2eIsolatedEnv` in `e2e/production-service-guard.ts`:
+
+- The Sentry, Upstash, Logflare, Better Stack, e-mail and New Relic (server and browser agent: `*_ENABLED` and `*_LICENSE_KEY`) keys are pinned empty. `EMAIL_PROVIDER` falls back to `none`.
+- `NEXT_PUBLIC_APP_URL` is pinned to the scenario base URL. A non-loopback base URL is refused.
+
+This works because `@next/env` never overrides a key already present in the process env, and `env.ts` treats an empty value as unset.
+
+**Building for E2E.** Use `pnpm e2e:build`, never a plain `pnpm build`; the `e2e:*:ci` scripts and the E2E workflows already do. It builds with the isolated env and fails closed in two places:
+
+- before the build, if Next's own `@next/env` shows any outbound key or a non-loopback app URL would still be loaded;
+- after the build, if `.next/static` or `.next/server` inlines a Sentry DSN or a non-loopback `NEXT_PUBLIC_APP_URL` from the env files.
+
+A build that passes both is marked with its origin (`.next/e2e-base-origin`). Both `pnpm e2e:build` and Playwright resolve the base URL the same way (`PLAYWRIGHT_TEST_BASE_URL`, default `http://localhost:3100`), so set the same value for both when you use another port.
+
+**Before any web server starts,** the guard checks the env again for both `next dev` and `next start`. In `CI` mode, where `next start` serves the existing build, it repeats the artifact scan and requires the marker to match this run's origin; a plain `pnpm build`, or a build for another port or host, is refused. Errors name keys and files only, never values.
 
 ## Runtime Profiles And Scenario Model
 

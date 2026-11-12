@@ -1,3 +1,10 @@
+## [2.27.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.27.0...v2.27.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **ci:** guard privileged release workflow_run against untrusted triggers ([d182866](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d182866a28b775d17a702f3e1c845a424b723bab))
+
 # [2.27.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.26.2...v2.27.0) (2026-11-11)
 
 
